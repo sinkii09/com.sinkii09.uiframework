@@ -7,7 +7,6 @@ namespace Sinkii09.UIFramework
     {
         string ViewId { get; }
         bool IsVisible { get; }
-        UITransitionType Transition { get; }
 
         UniTask InitializeAsync(CancellationToken ct = default);
         UniTask ShowAsync(CancellationToken ct = default);

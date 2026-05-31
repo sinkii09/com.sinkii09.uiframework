@@ -14,7 +14,7 @@ namespace Sinkii09.UIFramework
 
         public NavigationStack(int maxDepth = 10) => _maxDepth = maxDepth;
 
-        public async UniTask PushAsync(IUIView view, UITransitionType transition, CancellationToken ct = default)
+        public async UniTask PushAsync(IUIView view, CancellationToken ct = default)
         {
             if (_views.Count >= _maxDepth)
             {

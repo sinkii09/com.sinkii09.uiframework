@@ -269,12 +269,14 @@ namespace Sinkii09.UIFramework.Editor
 
         private bool Step5_AddDefine()
         {
-            const string define = "VCONTAINER_UNITASK_INTEGRATION";
-            if (HasDefine(define)) { Mark(4, Status.Done); Log("Step 5: Define already present."); return true; }
+            string[] defines = { "VCONTAINER_UNITASK_INTEGRATION", "UNITASK_DOTWEEN_SUPPORT" };
             var namedTarget = NamedBuildTarget.FromBuildTargetGroup(EditorUserBuildSettings.selectedBuildTargetGroup);
             var defs = PlayerSettings.GetScriptingDefineSymbols(namedTarget);
-            PlayerSettings.SetScriptingDefineSymbols(namedTarget, string.IsNullOrEmpty(defs) ? define : defs + ";" + define);
-            Mark(4, Status.Done); Log("Step 5: VCONTAINER_UNITASK_INTEGRATION added."); return true;
+            var missing = Array.FindAll(defines, d => !defs.Contains(d));
+            if (missing.Length == 0) { Mark(4, Status.Done); Log("Step 5: Defines already present."); return true; }
+            var updated = string.IsNullOrEmpty(defs) ? string.Join(";", missing) : defs + ";" + string.Join(";", missing);
+            PlayerSettings.SetScriptingDefineSymbols(namedTarget, updated);
+            Mark(4, Status.Done); Log($"Step 5: Added defines: {string.Join(", ", missing)}."); return true;
         }
 
         private bool Step6_ValidateDOTween()

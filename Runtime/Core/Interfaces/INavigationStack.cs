@@ -7,7 +7,7 @@ namespace Sinkii09.UIFramework
     {
         int Count { get; }
 
-        UniTask PushAsync(IUIView view, UITransitionType transition, CancellationToken ct = default);
+        UniTask PushAsync(IUIView view, CancellationToken ct = default);
         UniTask<IUIView> PopAsync(CancellationToken ct = default);
         IUIView Peek();
         UniTask ClearAsync(CancellationToken ct = default);

@@ -3,26 +3,43 @@
     "rootNamespace": "Sinkii09.UIFramework",
     "references": [
         "UniTask",
-        "R3",
         "R3.Unity",
         "VContainer",
-        "VContainer.Unity",
         "Unity.Addressables",
         "Unity.ResourceManager",
-        "MoreMountains.Feedbacks",
         "MoreMountains.Tools",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "DOTween.Modules",
+        "DOTweenPro.Scripts",
+        "UniTask.DOTween"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
+    "precompiledReferences": [],
     "autoReferenced": true,
-    "versionDefines": [
-        { "name": "com.cysharp.unitask",       "expression": "", "define": "SINKII09_UNITASK" },
-        { "name": "com.cysharp.r3",            "expression": "", "define": "SINKII09_R3" },
-        { "name": "jp.hadashikick.vcontainer", "expression": "", "define": "SINKII09_VCONTAINER" }
+    "defineConstraints": [
+        "SINKII09_UNITASK",
+        "SINKII09_R3",
+        "SINKII09_VCONTAINER"
     ],
-    "defineConstraints": ["SINKII09_UNITASK", "SINKII09_R3", "SINKII09_VCONTAINER"],
+    "versionDefines": [
+        {
+            "name": "com.cysharp.unitask",
+            "expression": "",
+            "define": "SINKII09_UNITASK"
+        },
+        {
+            "name": "com.cysharp.r3",
+            "expression": "",
+            "define": "SINKII09_R3"
+        },
+        {
+            "name": "jp.hadashikick.vcontainer",
+            "expression": "",
+            "define": "SINKII09_VCONTAINER"
+        }
+    ],
     "noEngineReferences": false
 }

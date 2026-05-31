@@ -9,14 +9,24 @@ namespace Sinkii09.UIFramework
     [RequireComponent(typeof(CanvasGroup))]
     public abstract class UIViewBase : MonoBehaviour, IUIView
     {
-        [SerializeField] private UITransitionType _showTransition = UITransitionType.Fade;
-        [SerializeField] private UITransitionType _hideTransition = UITransitionType.Fade;
+        // Null = instant show/hide (no animation). Assign ScriptableObject transitions in Inspector.
+        [SerializeField] private UITransition _showTransition;
+        [SerializeField] private UITransition _hideTransition;
 
         private IUIAnimator _animator;
 
         public string ViewId => GetType().Name;
         public bool IsVisible { get; private set; }
-        public UITransitionType Transition => _showTransition;
+
+        // Cached in Awake — used by UITransition subclasses (FadeTransition, ScaleTransition, SlideTransition).
+        public CanvasGroup CanvasGroup { get; private set; }
+        public RectTransform RectTransform { get; private set; }
+
+        protected virtual void Awake()
+        {
+            CanvasGroup = GetComponent<CanvasGroup>();
+            RectTransform = GetComponent<RectTransform>();
+        }
 
         [Inject]
         private void Construct(IUIAnimator animator) => _animator = animator;
@@ -35,10 +45,11 @@ namespace Sinkii09.UIFramework
                 if (_animator != null)
                     await _animator.ShowAsync(this, _showTransition, cts.Token);
                 await OnShowAsync(cts.Token);
-                IsVisible = true; // set after animation completes, not at start
+                IsVisible = true;
             }
             catch (OperationCanceledException)
             {
+                IsVisible = false;
                 gameObject.SetActive(false);
             }
         }

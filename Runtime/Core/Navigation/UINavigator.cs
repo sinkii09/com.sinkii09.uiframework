@@ -67,7 +67,7 @@ namespace Sinkii09.UIFramework
             try
             {
                 var view = await creator(ct);
-                await _stack.PushAsync(view, view.Transition, ct);
+                await _stack.PushAsync(view, ct);
             }
             finally { _isTransitioning = false; }
         }
@@ -89,7 +89,7 @@ namespace Sinkii09.UIFramework
             try
             {
                 var view = await creator(args, ct);
-                await _stack.PushAsync(view, view.Transition, ct);
+                await _stack.PushAsync(view, ct);
             }
             finally { _isTransitioning = false; }
         }

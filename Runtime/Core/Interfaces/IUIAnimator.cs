@@ -5,7 +5,7 @@ namespace Sinkii09.UIFramework
 {
     public interface IUIAnimator
     {
-        UniTask ShowAsync(IUIView view, UITransitionType transition, CancellationToken ct = default);
-        UniTask HideAsync(IUIView view, UITransitionType transition, CancellationToken ct = default);
+        UniTask ShowAsync(IUIView view, UITransition transition, CancellationToken ct = default);
+        UniTask HideAsync(IUIView view, UITransition transition, CancellationToken ct = default);
     }
 }
