@@ -1,0 +1,12 @@
+{
+    "name": "Sinkii09.UIFramework.Editor.Installer",
+    "rootNamespace": "Sinkii09.UIFramework.Editor",
+    "references": ["Unity.ugui"],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "noEngineReferences": false
+}

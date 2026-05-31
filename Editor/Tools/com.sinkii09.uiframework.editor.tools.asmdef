@@ -1,0 +1,17 @@
+{
+    "name": "Sinkii09.UIFramework.Editor.Tools",
+    "rootNamespace": "Sinkii09.UIFramework.Editor",
+    "references": [
+        "Sinkii09.UIFramework",
+        "UniTask",
+        "VContainer",
+        "VContainer.Unity"
+    ],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "autoReferenced": false,
+    "defineConstraints": ["SINKII09_UNITASK", "SINKII09_R3", "SINKII09_VCONTAINER"],
+    "noEngineReferences": false
+}
