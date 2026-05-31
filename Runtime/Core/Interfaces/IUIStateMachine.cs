@@ -7,9 +7,9 @@ namespace Sinkii09.UIFramework
     {
         IViewState CurrentState { get; }
 
-        // Registering the same type twice silently overwrites the previous entry
+        // Throws InvalidOperationException if the same type is registered twice
         void RegisterState<T>(T state) where T : IViewState;
-        // Throws if T was never registered via RegisterState
+        // Throws InvalidOperationException if T was never registered via RegisterState
         UniTask ChangeStateAsync<T>(CancellationToken ct = default) where T : IViewState;
     }
 }

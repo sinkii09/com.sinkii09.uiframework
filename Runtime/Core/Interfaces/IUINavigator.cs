@@ -9,7 +9,8 @@ namespace Sinkii09.UIFramework
         bool IsTransitioning { get; }
 
         UniTask ShowAsync<T>(CancellationToken ct = default) where T : IUIView;
-        // View-to-args type safety is enforced by IUIViewFactory; the navigator routes only
+        // C# cannot link TArgs to T's expected ViewModel args type — mismatched calls compile
+        // but throw at runtime inside IUIViewFactory. UINavigator asserts T's ViewModel accepts TArgs.
         UniTask ShowAsync<T, TArgs>(TArgs args, CancellationToken ct = default) where T : IUIView where TArgs : IViewArgs;
         UniTask HideAsync<T>(CancellationToken ct = default) where T : IUIView;
         UniTask PopAsync(CancellationToken ct = default);
