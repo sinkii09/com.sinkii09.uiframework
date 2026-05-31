@@ -38,14 +38,14 @@ namespace Sinkii09.UIFramework
         // Enforces single-instance-per-type; multi-instance UI is managed inside its parent view.
         public void Register<TView, TViewModel>()
             where TView : IUIView
-            where TViewModel : IViewModel
+            where TViewModel : class, IViewModel
         {
             _creators[typeof(TView)] = ct => CreateViewAsync<TView, TViewModel>(ct);
         }
 
         public void Register<TView, TViewModel, TArgs>()
             where TView : IUIView
-            where TViewModel : IViewModel<TArgs>
+            where TViewModel : class, IViewModel<TArgs>
             where TArgs : IViewArgs
         {
             _argsCreators[typeof(TView)] = (args, ct) =>
@@ -154,14 +154,14 @@ namespace Sinkii09.UIFramework
 
         private async UniTask<IUIView> CreateViewAsync<TView, TViewModel>(CancellationToken ct)
             where TView : IUIView
-            where TViewModel : IViewModel
+            where TViewModel : class, IViewModel
         {
             return await _factory.CreateAsync<TView, TViewModel>(ct);
         }
 
         private async UniTask<IUIView> CreateViewWithArgsAsync<TView, TViewModel, TArgs>(TArgs args, CancellationToken ct)
             where TView : IUIView
-            where TViewModel : IViewModel<TArgs>
+            where TViewModel : class, IViewModel<TArgs>
             where TArgs : IViewArgs
         {
             return await _factory.CreateAsync<TView, TViewModel, TArgs>(args, ct);

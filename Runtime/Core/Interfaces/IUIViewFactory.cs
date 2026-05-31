@@ -7,11 +7,11 @@ namespace Sinkii09.UIFramework
     {
         UniTask<TView> CreateAsync<TView, TViewModel>(CancellationToken ct = default)
             where TView : IUIView
-            where TViewModel : IViewModel;
+            where TViewModel : class, IViewModel;
 
         UniTask<TView> CreateAsync<TView, TViewModel, TArgs>(TArgs args, CancellationToken ct = default)
             where TView : IUIView
-            where TViewModel : IViewModel<TArgs>
+            where TViewModel : class, IViewModel<TArgs>
             where TArgs : IViewArgs;
     }
 }
