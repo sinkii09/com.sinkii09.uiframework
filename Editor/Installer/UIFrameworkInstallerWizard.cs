@@ -39,11 +39,12 @@ namespace Sinkii09.UIFramework.Editor
             _status[0] = nugetInManifest ? Status.Done : Status.Pending;
             _status[1] = r3DllPresent    ? Status.Done : Status.Pending;
             _status[2] = openUpmDone     ? Status.Done : Status.Pending;
-            _status[3] = HasDefine("VCONTAINER_UNITASK_INTEGRATION") ? Status.Done : Status.Pending;
-            _status[4] = IsDOTweenPresent() ? Status.Done : Status.Pending;
-            _status[5] = File.Exists("Assets/_Project/Prefabs/UIRoot.prefab") ? Status.Done : Status.Pending;
-            _status[6] = File.Exists("Assets/Resources/UIFramework/UIFrameworkConfig.asset") ? Status.Done : Status.Pending;
-            _status[7] = AssetDatabase.IsValidFolder("Assets/_Project/Features") ? Status.Done : Status.Pending;
+            _status[3] = IsTmpPresent()  ? Status.Done : Status.Pending;
+            _status[4] = HasDefine("VCONTAINER_UNITASK_INTEGRATION") ? Status.Done : Status.Pending;
+            _status[5] = IsDOTweenPresent() ? Status.Done : Status.Pending;
+            _status[6] = File.Exists("Assets/_Project/Prefabs/UIRoot.prefab") ? Status.Done : Status.Pending;
+            _status[7] = File.Exists("Assets/Resources/UIFramework/UIFrameworkConfig.asset") ? Status.Done : Status.Pending;
+            _status[8] = AssetDatabase.IsValidFolder("Assets/_Project/Features") ? Status.Done : Status.Pending;
         }
 
         private void OnGUI()
@@ -77,11 +78,12 @@ namespace Sinkii09.UIFramework.Editor
             if (!Step1_InstallNuGetForUnity()) return;
             if (!Step2_InstallR3NuGet()) return;
             if (!Step3_InstallOpenUpmDeps()) return;
-            if (!Step4_AddDefine()) return;
-            if (!Step5_ValidateDOTween()) return;
-            if (!Step6_CreateUIRootPrefab()) return;
-            if (!Step7_CreateConfigAsset()) return;
-            Step8_CreateFolderStructure();
+            if (!Step4_InstallTextMeshPro()) return;
+            if (!Step5_AddDefine()) return;
+            if (!Step6_ValidateDOTween()) return;
+            if (!Step7_CreateUIRootPrefab()) return;
+            if (!Step8_CreateConfigAsset()) return;
+            Step9_CreateFolderStructure();
             EditorPrefs.DeleteKey(PendingKey);
             Log("Setup complete ✓");
         }

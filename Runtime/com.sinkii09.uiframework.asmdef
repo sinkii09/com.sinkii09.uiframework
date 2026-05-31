@@ -10,7 +10,8 @@
         "Unity.Addressables",
         "Unity.ResourceManager",
         "MoreMountains.Feedbacks",
-        "MoreMountains.Tools"
+        "MoreMountains.Tools",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

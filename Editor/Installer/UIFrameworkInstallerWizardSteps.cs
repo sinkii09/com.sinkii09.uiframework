@@ -19,11 +19,12 @@ namespace Sinkii09.UIFramework.Editor
             "1. Install NuGetForUnity",
             "2. Install R3 NuGet DLL",
             "3. Install OpenUPM packages (R3 wrapper, UniTask, VContainer)",
-            "4. Add VCONTAINER_UNITASK_INTEGRATION define",
-            "5. Validate DOTween Pro",
-            "6. Create UIRoot prefab",
-            "7. Create UIFrameworkConfig asset",
-            "8. Create _Project/ folder structure"
+            "4. Install TextMeshPro",
+            "5. Add VCONTAINER_UNITASK_INTEGRATION define",
+            "6. Validate DOTween Pro",
+            "7. Create UIRoot prefab",
+            "8. Create UIFrameworkConfig asset",
+            "9. Create _Project/ folder structure"
         };
 
         private const string NuGetForUnityId  = "com.github-glitchenzo.nugetforunity";
@@ -220,28 +221,74 @@ namespace Sinkii09.UIFramework.Editor
             return content.Insert(depsIdx, $"\"scopedRegistries\": [\n    {entry}\n  ],\n  ");
         }
 
-        private bool Step4_AddDefine()
+        private bool Step4_InstallTextMeshPro()
         {
-            const string define = "VCONTAINER_UNITASK_INTEGRATION";
-            if (HasDefine(define)) { Mark(3, Status.Done); Log("Step 4: Define already present."); return true; }
-            var namedTarget = NamedBuildTarget.FromBuildTargetGroup(EditorUserBuildSettings.selectedBuildTargetGroup);
-            var defs = PlayerSettings.GetScriptingDefineSymbols(namedTarget);
-            PlayerSettings.SetScriptingDefineSymbols(namedTarget, string.IsNullOrEmpty(defs) ? define : defs + ";" + define);
-            Mark(3, Status.Done); Log("Step 4: VCONTAINER_UNITASK_INTEGRATION added."); return true;
-        }
+            if (IsTmpPresent())
+            {
+                // TMP assembly available — ensure Essential Resources are imported
+                if (!AssetDatabase.IsValidFolder("Assets/TextMesh Pro"))
+                {
+                    var utilType = FindType("TMPro.TMP_PackageUtilities");
+                    var method   = utilType?.GetMethod("ImportProjectResourcesMenu",
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (method != null)
+                        method.Invoke(null, null);
+                    else
+                        Log("Step 4: TMP ready. Import Essential Resources manually: Window > TextMeshPro > Import TMP Essential Resources.");
+                }
+                Mark(3, Status.Done); Log("Step 4: TextMeshPro ready."); return true;
+            }
 
-        private bool Step5_ValidateDOTween()
-        {
-            if (IsDOTweenPresent()) { Mark(4, Status.Done); Log("Step 5: DOTween detected."); return true; }
-            Mark(4, Status.Failed);
-            Log("Step 5 FAILED: DOTween Pro not found.\nInstall from Asset Store, then Refresh and Run Setup.");
+            // TMP not yet available — add to manifest
+            string content;
+            try { content = File.ReadAllText(ManifestPath); }
+            catch (Exception ex) { Mark(3, Status.Failed); Log($"Step 4 FAILED: {ex.Message}"); return false; }
+
+            if (!content.Contains("\"com.unity.textmeshpro\""))
+            {
+                const string marker = "\"dependencies\": {";
+                int idx = content.IndexOf(marker, StringComparison.Ordinal);
+                if (idx < 0) { Mark(3, Status.Failed); Log("Step 4 FAILED: Cannot parse manifest.json."); return false; }
+                content = content.Insert(idx + marker.Length, "\n    \"com.unity.textmeshpro\": \"3.0.9\",");
+
+                try { File.WriteAllText(ManifestPath, content); }
+                catch (Exception ex) { Mark(3, Status.Failed); Log($"Step 4 FAILED: {ex.Message}"); return false; }
+
+                EditorPrefs.SetBool(PendingKey, true);
+                Client.Resolve();
+                Mark(3, Status.Done);
+                Log("Step 4: TextMeshPro added to manifest. Reopen wizard after domain reload.");
+                return false;
+            }
+
+            // In manifest but not compiled yet — domain reload in progress
+            Mark(3, Status.Failed);
+            Log("Step 4: TextMeshPro in manifest but assembly not ready — wait for domain reload, then Refresh.");
             return false;
         }
 
-        private bool Step6_CreateUIRootPrefab()
+        private bool Step5_AddDefine()
+        {
+            const string define = "VCONTAINER_UNITASK_INTEGRATION";
+            if (HasDefine(define)) { Mark(4, Status.Done); Log("Step 5: Define already present."); return true; }
+            var namedTarget = NamedBuildTarget.FromBuildTargetGroup(EditorUserBuildSettings.selectedBuildTargetGroup);
+            var defs = PlayerSettings.GetScriptingDefineSymbols(namedTarget);
+            PlayerSettings.SetScriptingDefineSymbols(namedTarget, string.IsNullOrEmpty(defs) ? define : defs + ";" + define);
+            Mark(4, Status.Done); Log("Step 5: VCONTAINER_UNITASK_INTEGRATION added."); return true;
+        }
+
+        private bool Step6_ValidateDOTween()
+        {
+            if (IsDOTweenPresent()) { Mark(5, Status.Done); Log("Step 6: DOTween detected."); return true; }
+            Mark(5, Status.Failed);
+            Log("Step 6 FAILED: DOTween Pro not found.\nInstall from Asset Store, then Refresh and Run Setup.");
+            return false;
+        }
+
+        private bool Step7_CreateUIRootPrefab()
         {
             const string prefabPath = "Assets/_Project/Prefabs/UIRoot.prefab";
-            if (File.Exists(prefabPath)) { Mark(5, Status.Done); Log("Step 6: UIRoot prefab already exists."); return true; }
+            if (File.Exists(prefabPath)) { Mark(6, Status.Done); Log("Step 7: UIRoot prefab already exists."); return true; }
 
             EnsureFolder("Assets", "_Project");
             EnsureFolder("Assets/_Project", "Prefabs");
@@ -272,19 +319,19 @@ namespace Sinkii09.UIFramework.Editor
             PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             DestroyImmediate(root);
             AssetDatabase.Refresh();
-            Mark(5, Status.Done); Log("Step 6: UIRoot prefab created."); return true;
+            Mark(6, Status.Done); Log("Step 7: UIRoot prefab created."); return true;
         }
 
-        private bool Step7_CreateConfigAsset()
+        private bool Step8_CreateConfigAsset()
         {
             const string assetPath = "Assets/Resources/UIFramework/UIFrameworkConfig.asset";
-            if (File.Exists(assetPath)) { Mark(6, Status.Done); Log("Step 7: Config asset already exists."); return true; }
+            if (File.Exists(assetPath)) { Mark(7, Status.Done); Log("Step 8: Config asset already exists."); return true; }
 
             var configType = FindType("Sinkii09.UIFramework.UIFrameworkConfig");
             if (configType == null)
             {
-                Mark(6, Status.Done);
-                Log("Step 7: UIFrameworkConfig not available yet — rerun after runtime code is added.");
+                Mark(7, Status.Done);
+                Log("Step 8: UIFrameworkConfig not available yet — rerun after runtime code is added.");
                 return true;
             }
 
@@ -293,10 +340,10 @@ namespace Sinkii09.UIFramework.Editor
             var asset = ScriptableObject.CreateInstance(configType);
             AssetDatabase.CreateAsset(asset, assetPath);
             AssetDatabase.SaveAssets();
-            Mark(6, Status.Done); Log("Step 7: UIFrameworkConfig created."); return true;
+            Mark(7, Status.Done); Log("Step 8: UIFrameworkConfig created."); return true;
         }
 
-        private void Step8_CreateFolderStructure()
+        private void Step9_CreateFolderStructure()
         {
             EnsureFolder("Assets", "_Project");
             EnsureFolder("Assets/_Project", "Features");
@@ -304,8 +351,10 @@ namespace Sinkii09.UIFramework.Editor
             EnsureFolder("Assets", "Resources");
             EnsureFolder("Assets/Resources", "UIFramework");
             AssetDatabase.Refresh();
-            Mark(7, Status.Done); Log("Step 8: Folder structure ready.");
+            Mark(8, Status.Done); Log("Step 9: Folder structure ready.");
         }
+
+        private static bool IsTmpPresent() => FindType("TMPro.TMP_Text") != null;
 
         private static bool IsR3DllPresent()
         {
