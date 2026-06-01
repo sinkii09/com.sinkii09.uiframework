@@ -43,6 +43,16 @@ namespace Sinkii09.UIFramework
 
             // Registers all discovered UIView<T> ViewModels as Transient so UIViewFactory can resolve them.
             UIViewRegistry.AutoRegister(builder);
+
+            // --- Game Lifecycle ---
+            builder.Register<ISceneLoader, SceneLoader>(Lifetime.Singleton);
+            builder.RegisterInstance<ILoadingContext>(new LoadingContext());
+            builder.Register<BootState>(Lifetime.Singleton);
+            builder.Register<LoadingState>(Lifetime.Singleton);
+            // GameplayState and other game-specific states are NOT registered here.
+            // In your game bootstrap IInitializable.Initialize(), resolve each state
+            // and call _lifecycle.RegisterState(state) before StartAsync runs.
+            builder.RegisterEntryPoint<GameLifecycleManager>(Lifetime.Singleton);
         }
 
         private static void RegisterLoader(IContainerBuilder builder, UIFrameworkConfig config)
