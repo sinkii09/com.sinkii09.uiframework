@@ -17,6 +17,7 @@ namespace Sinkii09.UIFramework
 
         public string ViewId => GetType().Name;
         public bool IsVisible { get; private set; }
+        public virtual UILayer Layer => UILayer.Screen;
 
         // Cached in Awake — used by UITransition subclasses (FadeTransition, ScaleTransition, SlideTransition).
         public CanvasGroup CanvasGroup { get; private set; }

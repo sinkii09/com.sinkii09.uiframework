@@ -12,7 +12,8 @@ namespace Sinkii09.UIFramework
 
         public int Count => _views.Count;
 
-        public NavigationStack(int maxDepth = 10) => _maxDepth = maxDepth;
+        public NavigationStack(UIFrameworkConfig config) =>
+            _maxDepth = config != null ? config.MaxNavigationDepth : 10;
 
         public async UniTask PushAsync(IUIView view, CancellationToken ct = default)
         {

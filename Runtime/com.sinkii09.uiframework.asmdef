@@ -10,8 +10,7 @@
         "MoreMountains.Tools",
         "Unity.TextMeshPro",
         "DOTween.Modules",
-        "DOTweenPro.Scripts",
-        "UniTask.DOTween"
+        "DOTweenPro.Scripts"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
