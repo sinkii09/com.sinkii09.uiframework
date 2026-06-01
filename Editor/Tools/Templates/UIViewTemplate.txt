@@ -1,0 +1,13 @@
+using Sinkii09.UIFramework;
+
+namespace {NAMESPACE}
+{
+    public class {VIEW_NAME} : UIView<{VIEWMODEL_NAME}>
+    {
+        protected override void BindViewModel({VIEWMODEL_NAME} vm)
+        {
+            // Set up R3 bindings here.
+            // Subscriptions that should live only during Show→Hide: .AddTo(ref _showDisposables)
+        }
+    }
+}

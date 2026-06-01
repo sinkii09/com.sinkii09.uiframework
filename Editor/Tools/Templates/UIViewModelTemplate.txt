@@ -1,0 +1,18 @@
+using Sinkii09.UIFramework;
+
+namespace {NAMESPACE}
+{
+    public class {VIEWMODEL_NAME} : ViewModelBase
+    {
+        public override void OnShow()
+        {
+            // Subscribe to data sources here.
+            // Use _showDisposables for subscriptions that should reset on re-show.
+        }
+
+        public override void OnHide()
+        {
+            base.OnHide(); // disposes _showDisposables
+        }
+    }
+}
