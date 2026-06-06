@@ -6,7 +6,7 @@ namespace Sinkii09.UIFramework.Editor
 {
     public class UIFrameworkSetupWizard : EditorWindow
     {
-        private string _root = "Assets/_Project/UIFramework";
+        private string _root = "Assets/UIFramework";
 
         private void OnGUI()
         {

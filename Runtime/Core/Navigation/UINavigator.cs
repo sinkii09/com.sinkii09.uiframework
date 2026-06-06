@@ -8,16 +8,15 @@ using VContainer;
 namespace Sinkii09.UIFramework
 {
     // Facade over NavigationStack + UIStateMachine.
-    // Call Register<TView, TViewModel>() during VContainer installer setup to map view types.
+    // Views are auto-wired from UIViewRegistry. Call Register<>() only for manual overrides.
     // All navigation ops are main-thread only — _isTransitioning bool is not async-safe across threads.
     public class UINavigator : IUINavigator
     {
         private readonly INavigationStack _stack;
         private readonly IUIStateMachine _stateMachine;
         private readonly IUIViewFactory _factory;
+        private readonly UIRootLayerRefs _layers;
 
-        // Delegate closures capture TView + TViewModel type params at Register() call-site.
-        // This bridges ShowAsync<TView>() (one type param) to factory (needs two type params).
         private readonly Dictionary<Type, Func<CancellationToken, UniTask<IUIView>>> _creators = new();
         private readonly Dictionary<Type, Func<object, CancellationToken, UniTask<IUIView>>> _argsCreators = new();
 
@@ -27,15 +26,19 @@ namespace Sinkii09.UIFramework
         public bool IsTransitioning => _isTransitioning;
 
         [Inject]
-        public UINavigator(INavigationStack stack, IUIStateMachine stateMachine, IUIViewFactory factory)
+        public UINavigator(INavigationStack stack, IUIStateMachine stateMachine,
+            IUIViewFactory factory, IReadOnlyList<UIViewRegistration> registrations,
+            UIRootLayerRefs layers)
         {
             _stack = stack;
             _stateMachine = stateMachine;
             _factory = factory;
+            _layers = layers;
+            foreach (var r in registrations)
+                _creators[r.ViewType] = ct => _factory.CreateAsync(r.ViewType, r.VmType, r.Key, ct);
         }
 
-        // Call once per view type in the VContainer installer (UIFrameworkInstaller or similar).
-        // Enforces single-instance-per-type; multi-instance UI is managed inside its parent view.
+        // Manual override — use when a view needs args or a custom creation path.
         public void Register<TView, TViewModel>()
             where TView : IUIView
             where TViewModel : class, IViewModel
@@ -67,6 +70,9 @@ namespace Sinkii09.UIFramework
             try
             {
                 var view = await creator(ct);
+                // Block layers below this view BEFORE the push animation — prevents click-through
+                // on lower layers during the entrance transition.
+                RefreshLayerBlocking(view);
                 await _stack.PushAsync(view, ct);
             }
             finally { _isTransitioning = false; }
@@ -89,6 +95,8 @@ namespace Sinkii09.UIFramework
             try
             {
                 var view = await creator(args, ct);
+                // Block layers below this view BEFORE the push animation.
+                RefreshLayerBlocking(view);
                 await _stack.PushAsync(view, ct);
             }
             finally { _isTransitioning = false; }
@@ -107,7 +115,12 @@ namespace Sinkii09.UIFramework
             }
             _isTransitioning = true;
             try { await _stack.PopAsync(ct); }
-            finally { _isTransitioning = false; }
+            finally
+            {
+                // Re-evaluate after pop — view is removed from stack at this point.
+                RefreshLayerBlocking();
+                _isTransitioning = false;
+            }
         }
 
         public async UniTask PopAsync(CancellationToken ct = default)
@@ -119,7 +132,11 @@ namespace Sinkii09.UIFramework
             }
             _isTransitioning = true;
             try { await _stack.PopAsync(ct); }
-            finally { _isTransitioning = false; }
+            finally
+            {
+                RefreshLayerBlocking();
+                _isTransitioning = false;
+            }
         }
 
         public async UniTask CloseAllAsync(CancellationToken ct = default)
@@ -131,7 +148,11 @@ namespace Sinkii09.UIFramework
             }
             _isTransitioning = true;
             try { await _stack.ClearAsync(ct); }
-            finally { _isTransitioning = false; }
+            finally
+            {
+                RefreshLayerBlocking();
+                _isTransitioning = false;
+            }
         }
 
         // Always clears the stack before entering the new state.
@@ -144,12 +165,31 @@ namespace Sinkii09.UIFramework
                 return;
             }
             _isTransitioning = true;
-            try
-            {
-                await _stack.ClearAsync(ct);
-                await _stateMachine.ChangeStateAsync<TState>(ct);
-            }
+            try   { await _stack.ClearAsync(ct); }
             finally { _isTransitioning = false; }
+
+            // Enable all layers after clear — state's OnEnterAsync will call ShowAsync which
+            // re-applies correct blocking. _isTransitioning must be false before this call
+            // so the state's ShowAsync calls are not silently dropped.
+            RefreshLayerBlocking();
+            await _stateMachine.ChangeStateAsync<TState>(ct);
+        }
+
+        // The top-of-stack view is the sole authority for layer blocking.
+        // BlockLayersBelow enables that view's layer and every layer above it; everything below
+        // is disabled so lower views cannot receive input. Layers above the top view's UILayer
+        // remain interactable — overlays and debug layers stay live regardless of what is on top.
+        // pending is passed from ShowAsync (before PushAsync) so blocking applies during entrance.
+        private void RefreshLayerBlocking(IUIView pending = null)
+        {
+            if (_layers == null) return;
+
+            IUIView top = pending ?? _stack.Peek();
+
+            if (top is UIViewBase vb)
+                _layers.BlockLayersBelow(vb.Layer);
+            else
+                _layers.SetAllLayersInteractable(true);
         }
 
         private async UniTask<IUIView> CreateViewAsync<TView, TViewModel>(CancellationToken ct)

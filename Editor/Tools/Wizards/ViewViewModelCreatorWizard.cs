@@ -8,7 +8,7 @@ namespace Sinkii09.UIFramework.Editor
     {
         private string _viewName = "MyView";
         private string _namespace = "Game.UI";
-        private string _outputFolder = "Assets/_Project/UIFramework/Views";
+        private string _outputFolder = "Assets/UIFramework/Views";
 
         private void OnGUI()
         {

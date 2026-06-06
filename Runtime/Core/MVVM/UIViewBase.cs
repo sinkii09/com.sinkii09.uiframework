@@ -7,6 +7,8 @@ using VContainer;
 namespace Sinkii09.UIFramework
 {
     [RequireComponent(typeof(CanvasGroup))]
+    [RequireComponent(typeof(RectTransform))]
+
     public abstract class UIViewBase : MonoBehaviour, IUIView
     {
         // Null = instant show/hide (no animation). Assign ScriptableObject transitions in Inspector.
@@ -76,5 +78,9 @@ namespace Sinkii09.UIFramework
 
         protected virtual UniTask OnShowAsync(CancellationToken ct) => UniTask.CompletedTask;
         protected virtual UniTask OnHideAsync(CancellationToken ct) => UniTask.CompletedTask;
+
+        // Non-generic bridge for UIViewFactory's type-erased creation path.
+        // Each concrete UIView<TViewModel> subclass overrides this to cast and delegate to InitializeAsync.
+        internal abstract UniTask InitializeNonGenericAsync(IViewModel viewModel, IObjectResolver scope, CancellationToken ct);
     }
 }

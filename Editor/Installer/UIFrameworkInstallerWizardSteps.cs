@@ -24,7 +24,7 @@ namespace Sinkii09.UIFramework.Editor
             "6. Validate DOTween Pro",
             "7. Create UIRoot prefab",
             "8. Create UIFrameworkConfig asset",
-            "9. Create _Project/ folder structure"
+            "9. Create UIFramework/ folder structure"
         };
 
         private const string NuGetForUnityId  = "com.github-glitchenzo.nugetforunity";
@@ -289,11 +289,10 @@ namespace Sinkii09.UIFramework.Editor
 
         private bool Step7_CreateUIRootPrefab()
         {
-            const string prefabPath = "Assets/_Project/Prefabs/UIRoot.prefab";
+            const string prefabPath = "Assets/UIFramework/UIRoot.prefab";
             if (File.Exists(prefabPath)) { Mark(6, Status.Done); Log("Step 7: UIRoot prefab already exists."); return true; }
 
-            EnsureFolder("Assets", "_Project");
-            EnsureFolder("Assets/_Project", "Prefabs");
+            EnsureFolder("Assets", "UIFramework");
 
             var root = new GameObject("UIRoot");
             var canvas = root.AddComponent<Canvas>();
@@ -303,30 +302,46 @@ namespace Sinkii09.UIFramework.Editor
             scaler.referenceResolution = new Vector2(1080, 1920);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0.5f;
-            root.AddComponent<GraphicRaycaster>();
-
             string[] layerNames = { "HUD", "Screen", "Popup", "Overlay", "Debug" };
             int[] layerOrders = { 0, 100, 200, 300, 400 };
             for (int i = 0; i < layerNames.Length; i++)
             {
                 var child = new GameObject(layerNames[i]);
                 child.transform.SetParent(root.transform, false);
+                var rect = child.AddComponent<RectTransform>();
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
                 var c = child.AddComponent<Canvas>();
                 c.overrideSorting = true;
                 c.sortingOrder = layerOrders[i];
+                child.AddComponent<GraphicRaycaster>();
                 child.AddComponent<CanvasGroup>();
                 if (layerNames[i] == "Debug") child.SetActive(false);
             }
 
+            var safeAreaType = FindType("Sinkii09.UIFramework.SafeAreaProvider");
+            if (safeAreaType != null)
+                root.AddComponent(safeAreaType);
+            else
+                Log("Step 7 WARNING: SafeAreaProvider not found — add it to UIRoot manually after runtime compiles.");
+
+            var scopeType = FindType("Sinkii09.UIFramework.UIFrameworkLifetimeScope");
+            if (scopeType != null)
+                root.AddComponent(scopeType);
+            else
+                Log("Step 7 WARNING: UIFrameworkLifetimeScope not found — add it to UIRoot manually after runtime compiles.");
+
             PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             DestroyImmediate(root);
             AssetDatabase.Refresh();
-            Mark(6, Status.Done); Log("Step 7: UIRoot prefab created."); return true;
+            Mark(6, Status.Done); Log("Step 7: UIRoot prefab created with SafeAreaProvider + UIFrameworkLifetimeScope. Assign _config and _layers in Inspector."); return true;
         }
 
         private bool Step8_CreateConfigAsset()
         {
-            const string assetPath = "Assets/Resources/UIFramework/UIFrameworkConfig.asset";
+            const string assetPath = "Assets/UIFramework/UIFrameworkConfig.asset";
             if (File.Exists(assetPath)) { Mark(7, Status.Done); Log("Step 8: Config asset already exists."); return true; }
 
             var configType = FindType("Sinkii09.UIFramework.UIFrameworkConfig");
@@ -337,23 +352,22 @@ namespace Sinkii09.UIFramework.Editor
                 return true;
             }
 
-            EnsureFolder("Assets", "Resources");
-            EnsureFolder("Assets/Resources", "UIFramework");
+            EnsureFolder("Assets", "UIFramework");
             var asset = ScriptableObject.CreateInstance(configType);
             AssetDatabase.CreateAsset(asset, assetPath);
             AssetDatabase.SaveAssets();
-            Mark(7, Status.Done); Log("Step 8: UIFrameworkConfig created."); return true;
+            Mark(7, Status.Done); Log("Step 8: UIFrameworkConfig created at Assets/UIFramework/ — assign it to UIFrameworkLifetimeScope._config in the Inspector."); return true;
         }
 
         private void Step9_CreateFolderStructure()
         {
-            EnsureFolder("Assets", "_Project");
-            EnsureFolder("Assets/_Project", "Features");
-            EnsureFolder("Assets/_Project", "Prefabs");
-            EnsureFolder("Assets", "Resources");
-            EnsureFolder("Assets/Resources", "UIFramework");
+            EnsureFolder("Assets", "UIFramework");
+            EnsureFolder("Assets/UIFramework", "Features");
+            EnsureFolder("Assets/UIFramework", "Prefabs");
+            EnsureFolder("Assets/UIFramework", "Views");
+            EnsureFolder("Assets/UIFramework", "ViewModels");
             AssetDatabase.Refresh();
-            Mark(8, Status.Done); Log("Step 9: Folder structure ready.");
+            Mark(8, Status.Done); Log("Step 9: UIFramework/ folder structure ready.");
         }
 
         private static bool IsTmpPresent() => FindType("TMPro.TMP_Text") != null;

@@ -50,6 +50,9 @@ namespace Sinkii09.UIFramework
             _showDisposables = new DisposableBag();
         }
 
+        internal override UniTask InitializeNonGenericAsync(IViewModel viewModel, IObjectResolver scope, CancellationToken ct)
+            => InitializeAsync((TViewModel)viewModel, scope, ct);
+
         // Called by UIViewFactory on pool return (Phase 04 wires IPoolable.OnReturnedToPool → Cleanup).
         // _viewScope.Dispose() triggers VContainer's IDisposable tracking, which disposes the ViewModel.
         // Do NOT call _viewModel.Dispose() directly — VContainer owns the ViewModel's lifetime.

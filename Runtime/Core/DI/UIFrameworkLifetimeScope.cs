@@ -5,13 +5,43 @@ using VContainer.Unity;
 namespace Sinkii09.UIFramework
 {
     // Root VContainer LifetimeScope for the UIFramework.
-    // Add this MonoBehaviour to the UIRoot prefab (DontDestroyOnLoad bootstrap scene).
+    // Persists across scene loads via DontDestroyOnLoad — place the UIRoot prefab in your
+    // first scene and it will survive for the application lifetime. A duplicate-instance
+    // guard ensures a second UIRoot (e.g. from an additive scene load) is destroyed
+    // immediately, so only one container ever exists.
+    // Subclasses: override OnAwake() (not Awake) for post-container initialisation.
+    //             override Configure() to register additional services.
     // Assign UIFrameworkConfig in the Inspector, or place UIFrameworkConfig.asset in Resources/.
     [AddComponentMenu("UIFramework/UIFrameworkLifetimeScope")]
     public class UIFrameworkLifetimeScope : LifetimeScope
     {
+        private static UIFrameworkLifetimeScope _instance;
+
         [SerializeField] private UIFrameworkConfig _config;
         [SerializeField] private UIRootLayerRefs _layers;
+
+        protected override void Awake()
+        {
+            if (_instance != null && _instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            _instance = this;
+            DontDestroyOnLoad(gameObject);
+            base.Awake();
+            OnAwake();
+        }
+
+        // Called after the VContainer container is built. Override in subclasses for
+        // post-build initialisation without touching the singleton guard or DDOL logic.
+        protected virtual void OnAwake() { }
+
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            if (_instance == this) _instance = null;
+        }
 
         protected override void Configure(IContainerBuilder builder)
         {
@@ -30,7 +60,7 @@ namespace Sinkii09.UIFramework
             builder.Register<IUIViewFactory, UIViewFactory>(Lifetime.Singleton);
             builder.Register<INavigationStack, NavigationStack>(Lifetime.Singleton);
             builder.Register<IUIStateMachine, UIStateMachine>(Lifetime.Singleton);
-            builder.Register<IUINavigator, UINavigator>(Lifetime.Singleton);
+
 
             // SafeAreaProvider must be a MonoBehaviour on the UIRoot prefab hierarchy.
             if (GetComponentInChildren<SafeAreaProvider>() == null)
@@ -38,22 +68,27 @@ namespace Sinkii09.UIFramework
             else
                 builder.RegisterComponentInHierarchy<SafeAreaProvider>().AsImplementedInterfaces();
 
-            // RegisterEntryPoint covers IInitializable + IDisposable — no separate Register needed.
+            builder.Register<IBackButtonSource, NewInputSystemBackButtonSource>(Lifetime.Singleton);
             builder.RegisterEntryPoint<BackButtonRouter>();
 
-            // Registers all discovered UIView<T> ViewModels as Transient so UIViewFactory can resolve them.
+            // Scans assemblies: registers all ViewModels as Transient + populates UIViewRegistry.Registrations.
             UIViewRegistry.AutoRegister(builder);
-
+            builder.RegisterInstance(UIViewRegistry.Registrations);
+            builder.Register<IUINavigator, UINavigator>(Lifetime.Singleton);
+            
             // --- Game Lifecycle ---
             builder.Register<ISceneLoader, SceneLoader>(Lifetime.Singleton);
             builder.RegisterInstance<ILoadingContext>(new LoadingContext());
-            builder.Register<BootState>(Lifetime.Singleton);
+            RegisterBootState(builder);
             builder.Register<LoadingState>(Lifetime.Singleton);
-            // GameplayState and other game-specific states are NOT registered here.
-            // In your game bootstrap IInitializable.Initialize(), resolve each state
-            // and call _lifecycle.RegisterState(state) before StartAsync runs.
-            builder.RegisterEntryPoint<GameLifecycleManager>(Lifetime.Singleton);
+            // Game-specific states (GameplayState, PauseState, etc.) are registered by the game
+            // developer's IInitializable bootstrap via GameLifecycleManager.RegisterState<T>().
+            builder.RegisterEntryPoint<GameLifecycleManager>(Lifetime.Singleton).AsSelf();
         }
+
+        // Override in your game's LifetimeScope to substitute a custom BootState subclass.
+        protected virtual void RegisterBootState(IContainerBuilder builder)
+            => builder.Register<BootState>(Lifetime.Singleton);
 
         private static void RegisterLoader(IContainerBuilder builder, UIFrameworkConfig config)
         {

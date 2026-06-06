@@ -11,6 +11,7 @@ namespace Sinkii09.UIFramework
         private readonly int _maxDepth;
 
         public int Count => _views.Count;
+        public IReadOnlyList<IUIView> All => _views;
 
         public NavigationStack(UIFrameworkConfig config) =>
             _maxDepth = config != null ? config.MaxNavigationDepth : 10;

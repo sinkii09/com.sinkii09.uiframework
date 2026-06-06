@@ -10,7 +10,8 @@
         "MoreMountains.Tools",
         "Unity.TextMeshPro",
         "DOTween.Modules",
-        "DOTweenPro.Scripts"
+        "DOTweenPro.Scripts",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -42,9 +42,9 @@ namespace Sinkii09.UIFramework.Editor
             _status[3] = IsTmpPresent()  ? Status.Done : Status.Pending;
             _status[4] = HasDefine("VCONTAINER_UNITASK_INTEGRATION") ? Status.Done : Status.Pending;
             _status[5] = IsDOTweenPresent() ? Status.Done : Status.Pending;
-            _status[6] = File.Exists("Assets/_Project/Prefabs/UIRoot.prefab") ? Status.Done : Status.Pending;
-            _status[7] = File.Exists("Assets/Resources/UIFramework/UIFrameworkConfig.asset") ? Status.Done : Status.Pending;
-            _status[8] = AssetDatabase.IsValidFolder("Assets/_Project/Features") ? Status.Done : Status.Pending;
+            _status[6] = File.Exists("Assets/UIFramework/UIRoot.prefab") ? Status.Done : Status.Pending;
+            _status[7] = File.Exists("Assets/UIFramework/UIFrameworkConfig.asset") ? Status.Done : Status.Pending;
+            _status[8] = AssetDatabase.IsValidFolder("Assets/UIFramework/Features") ? Status.Done : Status.Pending;
         }
 
         private void OnGUI()
