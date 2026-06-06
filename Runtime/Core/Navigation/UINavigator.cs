@@ -21,6 +21,12 @@ namespace Sinkii09.UIFramework
         private readonly Dictionary<Type, Func<object, CancellationToken, UniTask<IUIView>>> _argsCreators = new();
 
         private bool _isTransitioning;
+        // Set during the state machine portion of ChangeStateAsync while _isTransitioning is still true.
+        // ShowAsync skips the block when this is set so state OnEnterAsync can push views.
+        // External callers also bypass the check during this window (unavoidable without redesigning
+        // the IGameState.OnEnterAsync → ShowAsync call chain), but layer blocking prevents actual user
+        // input from reaching buttons while _isTransitioning is true.
+        private bool _stateTransitionActive;
 
         public IUIView Current => _stack.Peek();
         public bool IsTransitioning => _isTransitioning;
@@ -57,7 +63,7 @@ namespace Sinkii09.UIFramework
 
         public async UniTask ShowAsync<T>(CancellationToken ct = default) where T : IUIView
         {
-            if (_isTransitioning)
+            if (_isTransitioning && !_stateTransitionActive)
             {
                 Debug.LogWarning($"[UINavigator] Transitioning — ShowAsync<{typeof(T).Name}> ignored.");
                 return;
@@ -66,7 +72,9 @@ namespace Sinkii09.UIFramework
                 throw new InvalidOperationException(
                     $"[UINavigator] No creator for {typeof(T).Name}. Call Register<{typeof(T).Name}, TViewModel>() in installer.");
 
-            _isTransitioning = true;
+            // Don't claim ownership of _isTransitioning if ChangeStateAsync already holds it.
+            bool ownsFlag = !_isTransitioning;
+            if (ownsFlag) _isTransitioning = true;
             try
             {
                 var view = await creator(ct);
@@ -75,14 +83,14 @@ namespace Sinkii09.UIFramework
                 RefreshLayerBlocking(view);
                 await _stack.PushAsync(view, ct);
             }
-            finally { _isTransitioning = false; }
+            finally { if (ownsFlag) _isTransitioning = false; }
         }
 
         public async UniTask ShowAsync<T, TArgs>(TArgs args, CancellationToken ct = default)
             where T : IUIView
             where TArgs : IViewArgs
         {
-            if (_isTransitioning)
+            if (_isTransitioning && !_stateTransitionActive)
             {
                 Debug.LogWarning($"[UINavigator] Transitioning — ShowAsync<{typeof(T).Name}> with args ignored.");
                 return;
@@ -91,7 +99,8 @@ namespace Sinkii09.UIFramework
                 throw new InvalidOperationException(
                     $"[UINavigator] No args-creator for {typeof(T).Name}. Call Register<{typeof(T).Name}, TViewModel, {typeof(TArgs).Name}>() in installer.");
 
-            _isTransitioning = true;
+            bool ownsFlag = !_isTransitioning;
+            if (ownsFlag) _isTransitioning = true;
             try
             {
                 var view = await creator(args, ct);
@@ -99,7 +108,7 @@ namespace Sinkii09.UIFramework
                 RefreshLayerBlocking(view);
                 await _stack.PushAsync(view, ct);
             }
-            finally { _isTransitioning = false; }
+            finally { if (ownsFlag) _isTransitioning = false; }
         }
 
         // Only hides if the top-of-stack view is T. Middle-of-stack removal is not supported.
@@ -165,14 +174,20 @@ namespace Sinkii09.UIFramework
                 return;
             }
             _isTransitioning = true;
-            try   { await _stack.ClearAsync(ct); }
-            finally { _isTransitioning = false; }
-
-            // Enable all layers after clear — state's OnEnterAsync will call ShowAsync which
-            // re-applies correct blocking. _isTransitioning must be false before this call
-            // so the state's ShowAsync calls are not silently dropped.
-            RefreshLayerBlocking();
-            await _stateMachine.ChangeStateAsync<TState>(ct);
+            try
+            {
+                await _stack.ClearAsync(ct);
+                RefreshLayerBlocking();
+                // _stateTransitionActive lets state OnEnterAsync call ShowAsync while _isTransitioning
+                // remains true — so IsTransitioning stays accurate for the full operation duration.
+                _stateTransitionActive = true;
+                await _stateMachine.ChangeStateAsync<TState>(ct);
+            }
+            finally
+            {
+                _stateTransitionActive = false;
+                _isTransitioning = false;
+            }
         }
 
         // The top-of-stack view is the sole authority for layer blocking.

@@ -8,6 +8,17 @@ namespace Sinkii09.UIFramework
         IUIView Current { get; }
         bool IsTransitioning { get; }
 
+        // Manual override for a no-args view (e.g. when a custom creation path is needed).
+        void Register<TView, TViewModel>()
+            where TView : IUIView
+            where TViewModel : class, IViewModel;
+
+        // Register a view that requires args. Call from bootstrap before any ShowAsync<T,TArgs> for this view.
+        void Register<TView, TViewModel, TArgs>()
+            where TView : IUIView
+            where TViewModel : class, IViewModel<TArgs>
+            where TArgs : IViewArgs;
+
         UniTask ShowAsync<T>(CancellationToken ct = default) where T : IUIView;
         // C# cannot link TArgs to T's expected ViewModel args type — mismatched calls compile
         // but throw at runtime inside IUIViewFactory. UINavigator asserts T's ViewModel accepts TArgs.

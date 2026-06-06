@@ -28,8 +28,8 @@ namespace Sinkii09.UIFramework
             return UniTask.CompletedTask;
         }
 
-        // Override to set up R3 bindings; add subscriptions to _showDisposables.
-        // Called once per view lifetime — BindViewModel is not called again on re-show.
+        // Override to set up R3 bindings; add show-time subscriptions to _showDisposables.
+        // Called once per initialization cycle — re-called when UIViewFactory reuses a cached instance.
         protected abstract void BindViewModel(TViewModel vm);
 
         public override async UniTask ShowAsync(CancellationToken externalCt = default)
@@ -53,7 +53,7 @@ namespace Sinkii09.UIFramework
         internal override UniTask InitializeNonGenericAsync(IViewModel viewModel, IObjectResolver scope, CancellationToken ct)
             => InitializeAsync((TViewModel)viewModel, scope, ct);
 
-        // Called by UIViewFactory on pool return (Phase 04 wires IPoolable.OnReturnedToPool → Cleanup).
+        // Called by FactoryReset() when UIViewFactory is about to reuse this cached instance.
         // _viewScope.Dispose() triggers VContainer's IDisposable tracking, which disposes the ViewModel.
         // Do NOT call _viewModel.Dispose() directly — VContainer owns the ViewModel's lifetime.
         protected virtual void Cleanup()
@@ -61,8 +61,13 @@ namespace Sinkii09.UIFramework
             _showDisposables.Dispose();
             _viewScope?.Dispose();
             _viewScope = null;
+            _viewModel = null;
             _showDisposables = new DisposableBag();
             _initialized = false;
         }
+
+        // UIViewFactory calls this before re-using a cached instance (rather than destroying + re-instantiating).
+        // Performs a full reset including _showDisposables in case HideAsync was cancelled before its teardown ran.
+        internal override void FactoryReset() => Cleanup();
     }
 }

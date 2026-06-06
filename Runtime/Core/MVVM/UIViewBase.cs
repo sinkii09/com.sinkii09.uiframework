@@ -82,5 +82,9 @@ namespace Sinkii09.UIFramework
         // Non-generic bridge for UIViewFactory's type-erased creation path.
         // Each concrete UIView<TViewModel> subclass overrides this to cast and delegate to InitializeAsync.
         internal abstract UniTask InitializeNonGenericAsync(IViewModel viewModel, IObjectResolver scope, CancellationToken ct);
+
+        // Package-internal factory hook — called before re-using a cached instance instead of destroying + re-instantiating.
+        // UIViewBase has no per-instance state; UIView<TViewModel> overrides to reset scope, bindings, and init flag.
+        internal virtual void FactoryReset() { }
     }
 }

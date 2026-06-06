@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 using VContainer;
 
 namespace Sinkii09.UIFramework
@@ -30,6 +31,12 @@ namespace Sinkii09.UIFramework
         private static readonly List<UIViewRegistration> _registrations = new();
 
         public static IReadOnlyList<UIViewRegistration> Registrations => _registrations;
+
+        // Unity Editor domain reloads (script recompile, Enter Play Mode) reinitialize static
+        // fields inconsistently across Unity versions. Clearing here guarantees a fresh scan
+        // on every Play session so newly added view types are never silently missed.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetOnDomainReload() => _registrations.Clear();
 
         public static void AutoRegister(IContainerBuilder builder)
         {
