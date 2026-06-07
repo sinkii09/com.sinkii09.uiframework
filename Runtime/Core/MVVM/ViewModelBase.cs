@@ -5,11 +5,11 @@ namespace Sinkii09.UIFramework
     public abstract class ViewModelBase : IViewModel
     {
         // Lifetime bindings — disposed only when the ViewModel is discarded (scope.Dispose via VContainer).
-        protected DisposableBag _disposables;
+        protected DisposableBag _disposables = new();
 
         // Per-show bindings — disposed + replaced on every OnHide() call.
         // DisposableBag has no Clear(); always Dispose() then reassign to reset.
-        protected DisposableBag _showDisposables;
+        protected DisposableBag _showDisposables = new();
 
         private bool _disposed;
 

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using Cysharp.Threading.Tasks;
 using System.Threading;
+using Cysharp.Threading.Tasks;
 using VContainer;
 using VContainer.Unity;
 
@@ -29,117 +29,16 @@ namespace Sinkii09.UIFramework
             _layers = layers;
         }
 
-        public async UniTask<TView> CreateAsync<TView, TViewModel>(CancellationToken ct = default)
+        public UniTask<TView> CreateAsync<TView, TViewModel>(CancellationToken ct = default)
             where TView : IUIView
             where TViewModel : class, IViewModel
-        {
-            bool isNew;
-            UIViewBase viewBase;
-            TView view;
+            => CreateGenericAsync<TView, TViewModel>(ct);
 
-            if (_cache.TryGetValue(typeof(TView), out viewBase) && viewBase != null)
-            {
-                // Reuse cached instance: reset scope + bindings so InitializeAsync runs fresh.
-                isNew = false;
-                viewBase.FactoryReset();
-                view = (TView)(IUIView)viewBase;
-            }
-            else
-            {
-                isNew = true;
-                view = await InstantiateViewAsync<TView>(ct);
-                if (view is not UIViewBase castBase)
-                    throw new InvalidOperationException(
-                        $"[UIViewFactory] {typeof(TView).Name} must extend UIViewBase.");
-                viewBase = castBase;
-            }
-
-            IObjectResolver scope = null;
-            try
-            {
-                scope = _container.CreateScope(builder =>
-                {
-                    builder.RegisterInstance(view);
-                    builder.Register<TViewModel>(Lifetime.Scoped);
-                });
-                // W2: inject from child scope so [Inject] members resolve scoped dependencies correctly.
-                // Skip ReparentToLayer on cache-hit — view is already under the correct layer transform.
-                if (isNew) ReparentToLayer(viewBase);
-                scope.InjectGameObject(viewBase.gameObject);
-                var viewModel = scope.Resolve<TViewModel>();
-                await CastAndInitialize<TView, TViewModel>(view, viewModel, scope, ct);
-                _cache[typeof(TView)] = viewBase;
-                return view;
-            }
-            catch
-            {
-                scope?.Dispose();
-                // On cache-miss failure: destroy the newly created GO and clear the cache entry.
-                // On cache-hit failure: leave the GO in its FactoryReset() state so the next
-                // ShowAsync attempt can retry with a fresh scope.
-                if (isNew)
-                {
-                    _cache.Remove(typeof(TView));
-                    UnityEngine.Object.Destroy(viewBase.gameObject);
-                }
-                throw;
-            }
-        }
-
-        public async UniTask<TView> CreateAsync<TView, TViewModel, TArgs>(TArgs args, CancellationToken ct = default)
+        public UniTask<TView> CreateAsync<TView, TViewModel, TArgs>(TArgs args, CancellationToken ct = default)
             where TView : IUIView
             where TViewModel : class, IViewModel<TArgs>
             where TArgs : IViewArgs
-        {
-            bool isNew;
-            UIViewBase viewBase;
-            TView view;
-
-            if (_cache.TryGetValue(typeof(TView), out viewBase) && viewBase != null)
-            {
-                isNew = false;
-                viewBase.FactoryReset();
-                view = (TView)(IUIView)viewBase;
-            }
-            else
-            {
-                isNew = true;
-                view = await InstantiateViewAsync<TView>(ct);
-                if (view is not UIViewBase castBase)
-                    throw new InvalidOperationException(
-                        $"[UIViewFactory] {typeof(TView).Name} must extend UIViewBase.");
-                viewBase = castBase;
-            }
-
-            IObjectResolver scope = null;
-            try
-            {
-                scope = _container.CreateScope(builder =>
-                {
-                    builder.RegisterInstance(view);
-                    builder.Register<TViewModel>(Lifetime.Scoped);
-                });
-                // W2: inject from child scope so [Inject] members resolve scoped dependencies correctly.
-                if (isNew) ReparentToLayer(viewBase);
-                scope.InjectGameObject(viewBase.gameObject);
-                var viewModel = scope.Resolve<TViewModel>();
-                // Initialize with args BEFORE BindViewModel so bindings fire against initialized state.
-                viewModel.Initialize(args);
-                await CastAndInitialize<TView, TViewModel>(view, viewModel, scope, ct);
-                _cache[typeof(TView)] = viewBase;
-                return view;
-            }
-            catch
-            {
-                scope?.Dispose();
-                if (isNew)
-                {
-                    _cache.Remove(typeof(TView));
-                    UnityEngine.Object.Destroy(viewBase.gameObject);
-                }
-                throw;
-            }
-        }
+            => CreateGenericAsync<TView, TViewModel>(ct, vm => vm.Initialize(args));
 
         public async UniTask<IUIView> CreateAsync(Type viewType, Type vmType, string key, CancellationToken ct = default)
         {
@@ -195,15 +94,77 @@ namespace Sinkii09.UIFramework
         }
 
         // VContainer calls Dispose() when the owning LifetimeScope is destroyed.
-        // Destroy cached GOs so they don't linger in the scene hierarchy after scope teardown.
+        // FactoryReset() disposes each view's child VContainer scope (releasing the ViewModel)
+        // before the GO is destroyed so R3 subscriptions in _disposables are cleaned up.
         public void Dispose()
         {
             foreach (var view in _cache.Values)
             {
                 if (view != null)
+                {
+                    view.FactoryReset();
                     UnityEngine.Object.Destroy(view.gameObject);
+                }
             }
             _cache.Clear();
+        }
+
+        // Shared creation path for both generic overloads. afterResolve is invoked between
+        // Resolve and InitializeAsync — used by the TArgs overload to call viewModel.Initialize(args).
+        private async UniTask<TView> CreateGenericAsync<TView, TViewModel>(
+            CancellationToken ct,
+            Action<TViewModel> afterResolve = null)
+            where TView : IUIView
+            where TViewModel : class, IViewModel
+        {
+            // Cache lookup before try — no resources allocated yet, nothing to clean up on miss.
+            bool isNew = !(_cache.TryGetValue(typeof(TView), out var viewBase) && viewBase != null);
+            TView view = isNew ? default : (TView)(IUIView)viewBase;
+            if (!isNew) viewBase.FactoryReset();
+
+            IObjectResolver scope = null;
+            try
+            {
+                if (isNew)
+                {
+                    // InstantiateViewAsync is inside try so viewBase is assigned before the
+                    // catch block — avoids a NullReferenceException masking the real error.
+                    view = await InstantiateViewAsync<TView>(ct);
+                    if (view is not UIViewBase castBase)
+                        throw new InvalidOperationException(
+                            $"[UIViewFactory] {typeof(TView).Name} must extend UIViewBase.");
+                    viewBase = castBase;
+                }
+
+                scope = _container.CreateScope(builder =>
+                {
+                    builder.RegisterInstance(view);
+                    builder.Register<TViewModel>(Lifetime.Scoped);
+                });
+                // W2: inject from child scope so [Inject] members resolve scoped dependencies correctly.
+                // Skip ReparentToLayer on cache-hit — view is already under the correct layer transform.
+                if (isNew) ReparentToLayer(viewBase);
+                scope.InjectGameObject(viewBase.gameObject);
+                var viewModel = scope.Resolve<TViewModel>();
+                afterResolve?.Invoke(viewModel);
+                await CastAndInitialize<TView, TViewModel>(view, viewModel, scope, ct);
+                _cache[typeof(TView)] = viewBase;
+                return view;
+            }
+            catch
+            {
+                scope?.Dispose();
+                // On cache-miss failure: destroy the newly created GO (if instantiation succeeded)
+                // and clear the cache entry.
+                // On cache-hit failure: leave the GO in its FactoryReset() state so the next
+                // ShowAsync attempt can retry with a fresh scope.
+                if (isNew && viewBase != null)
+                {
+                    _cache.Remove(typeof(TView));
+                    UnityEngine.Object.Destroy(viewBase.gameObject);
+                }
+                throw;
+            }
         }
 
         // Loads and instantiates the prefab without injection — callers inject via their child scope.

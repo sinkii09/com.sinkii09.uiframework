@@ -12,7 +12,7 @@ namespace Sinkii09.UIFramework
         private IObjectResolver _viewScope;
         private bool _initialized;
 
-        protected DisposableBag _showDisposables;
+        protected DisposableBag _showDisposables = new();
 
         protected TViewModel ViewModel => _viewModel;
 

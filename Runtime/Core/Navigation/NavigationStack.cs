@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -47,12 +48,13 @@ namespace Sinkii09.UIFramework
 
         public async UniTask ClearAsync(CancellationToken ct = default)
         {
-            // try/finally ensures each view is removed even if HideAsync throws or ct fires,
-            // so stack count stays consistent with actual visible views
+            // catch + continue: a non-cancellation exception from one HideAsync must not abort
+            // the loop — remaining views would stay visible with the stack partially cleared.
             for (int i = _views.Count - 1; i >= 0; i--)
             {
                 try { await _views[i].HideAsync(ct); }
-                finally { _views.RemoveAt(i); }
+                catch (Exception e) { Debug.LogException(e); }
+                _views.RemoveAt(i);
             }
         }
 

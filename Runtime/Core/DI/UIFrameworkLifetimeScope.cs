@@ -71,8 +71,8 @@ namespace Sinkii09.UIFramework
             builder.Register<IBackButtonSource, NewInputSystemBackButtonSource>(Lifetime.Singleton);
             builder.RegisterEntryPoint<BackButtonRouter>();
 
-            // Scans assemblies: registers all ViewModels as Transient + populates UIViewRegistry.Registrations.
-            UIViewRegistry.AutoRegister(builder);
+            // Scans assemblies for concrete UIView<T> subclasses; populates UIViewRegistry.Registrations.
+            UIViewRegistry.AutoRegister();
             builder.RegisterInstance(UIViewRegistry.Registrations);
             builder.Register<IUINavigator, UINavigator>(Lifetime.Singleton);
             

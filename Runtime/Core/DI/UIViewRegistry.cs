@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using VContainer;
 
 namespace Sinkii09.UIFramework
 {
@@ -38,7 +37,7 @@ namespace Sinkii09.UIFramework
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetOnDomainReload() => _registrations.Clear();
 
-        public static void AutoRegister(IContainerBuilder builder)
+        public static void AutoRegister()
         {
             // Guard: already scanned (e.g. called twice from hot-reload path).
             if (_registrations.Count > 0) return;
