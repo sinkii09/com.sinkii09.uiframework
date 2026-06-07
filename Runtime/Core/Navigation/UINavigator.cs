@@ -190,6 +190,8 @@ namespace Sinkii09.UIFramework
             }
         }
 
+        public void ResetState() => _stateMachine.ResetState();
+
         // The top-of-stack view is the sole authority for layer blocking.
         // BlockLayersBelow enables that view's layer and every layer above it; everything below
         // is disabled so lower views cannot receive input. Layers above the top view's UILayer
