@@ -6,7 +6,7 @@ namespace Sinkii09.UIFramework
     public interface IViewModel : IDisposable
     {
         void OnShow();
-        void OnHide();
+        void Show();
     }
 
     public interface IViewModel<TArgs> : IViewModel where TArgs : IViewArgs

@@ -45,7 +45,7 @@ namespace Sinkii09.UIFramework
             // null-guard: pool-return race can null _viewModel while animator was awaited
             if (_viewModel == null) return;
             // Teardown AFTER animation so active bindings remain valid during the hide transition
-            _viewModel.OnHide();
+            _viewModel.Show();
             _showDisposables.Dispose();
             _showDisposables = new DisposableBag();
         }

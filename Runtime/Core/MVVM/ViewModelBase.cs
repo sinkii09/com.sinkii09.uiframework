@@ -15,10 +15,16 @@ namespace Sinkii09.UIFramework
 
         public virtual void OnShow() { }
 
-        public virtual void OnHide()
+        public void Show()
         {
+            OnHide();
             _showDisposables.Dispose();
             _showDisposables = new DisposableBag();
+        }
+
+        protected virtual void OnHide()
+        {
+            
         }
 
         // Idempotent — safe if VContainer calls Dispose() after OnHide() already ran.
