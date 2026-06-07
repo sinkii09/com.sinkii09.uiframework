@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -40,6 +41,8 @@ namespace Sinkii09.UIFramework
         // Remove and return the last element (stack-pop behaviour on a List).
         public static T Pop<T>(this List<T> list)
         {
+            if (list.Count == 0)
+                throw new InvalidOperationException("Pop on empty list.");
             int last = list.Count - 1;
             T value = list[last];
             list.RemoveAt(last);

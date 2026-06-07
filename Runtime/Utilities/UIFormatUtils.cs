@@ -8,6 +8,7 @@ namespace Sinkii09.UIFramework
         // "2:05" from 125.3 seconds
         public static string FormatTime(float totalSeconds)
         {
+            totalSeconds = Mathf.Max(0f, totalSeconds);
             int m = (int)(totalSeconds / 60f);
             int s = (int)(totalSeconds % 60f);
             return $"{m}:{s:D2}";
@@ -16,6 +17,7 @@ namespace Sinkii09.UIFramework
         // "1:02:05" for durations >= 1 hour, falls back to "2:05" otherwise
         public static string FormatTimeLong(float totalSeconds)
         {
+            totalSeconds = Mathf.Max(0f, totalSeconds);
             int h = (int)(totalSeconds / 3600f);
             int m = (int)(totalSeconds % 3600f / 60f);
             int s = (int)(totalSeconds % 60f);

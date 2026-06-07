@@ -55,6 +55,14 @@ namespace Sinkii09.UIFramework
                 IsVisible = false;
                 gameObject.SetActive(false);
             }
+            catch
+            {
+                // Non-cancellation exception from animator or OnShowAsync — deactivate before rethrowing
+                // so the GO is not left active with IsVisible = false.
+                IsVisible = false;
+                gameObject.SetActive(false);
+                throw;
+            }
         }
 
         public virtual async UniTask HideAsync(CancellationToken externalCt = default)

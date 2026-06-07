@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using UnityEngine;
 
 namespace Sinkii09.UIFramework
 {
@@ -27,11 +28,27 @@ namespace Sinkii09.UIFramework
                 throw new InvalidOperationException(
                     $"[UIStateMachine] State {type.Name} not registered. Call RegisterState<{type.Name}>() first.");
 
-            if (_currentState != null)
-                await _currentState.OnExitAsync(ct);
+            if (next == _currentState)
+            {
+                Debug.LogWarning($"[UIStateMachine] Already in state {type.Name} — transition skipped.");
+                return;
+            }
 
-            _currentState = next;
-            await _currentState.OnEnterAsync(ct);
+            // _currentState is only promoted after OnEnterAsync succeeds.
+            // On failure (throw or cancellation), rollback to previous so the next
+            // ChangeStateAsync call does not exit a state that never fully entered.
+            var previous = _currentState;
+            try
+            {
+                if (previous != null) await previous.OnExitAsync(ct);
+                await next.OnEnterAsync(ct);
+                _currentState = next;
+            }
+            catch
+            {
+                _currentState = previous;
+                throw;
+            }
         }
     }
 }

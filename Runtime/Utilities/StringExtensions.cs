@@ -19,10 +19,22 @@ namespace Sinkii09.UIFramework
             => $"<color=#{ColorUtility.ToHtmlStringRGB(c)}>{s}</color>";
 
         // Color by hex string ("#FF0000" or "FF0000").
+        // Invalid hex (wrong length or non-hex chars) returns the string unmodified to prevent
+        // rich text tag injection from untrusted input (localization strings, user content).
         public static string Colored(this string s, string hex)
         {
+            if (string.IsNullOrEmpty(hex)) return s;
             hex = hex.TrimStart('#');
+            if ((hex.Length != 6 && hex.Length != 8) || !IsValidHex(hex)) return s;
             return $"<color=#{hex}>{s}</color>";
+        }
+
+        private static bool IsValidHex(string hex)
+        {
+            foreach (char c in hex)
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+                    return false;
+            return true;
         }
 
         // Override font size (TMP absolute size).
