@@ -93,5 +93,18 @@ namespace Sinkii09.UIFramework
             Disposable.Create(() => inputField.onValueChanged.RemoveListener(handler))
                 .AddTo(ref disposables);
         }
+
+        // Button click → Action, with automatic listener removal on dispose.
+        // Prevents stale delegate accumulation when the factory reuses a cached view.
+        // Usage: _btn.BindButton(vm.OnClick, ref _showDisposables);
+        public static void BindButton(
+            this Button button,
+            UnityAction handler,
+            ref DisposableBag disposables)
+        {
+            button.onClick.AddListener(handler);
+            Disposable.Create(() => button.onClick.RemoveListener(handler))
+                .AddTo(ref disposables);
+        }
     }
 }
