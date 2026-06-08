@@ -92,14 +92,16 @@ namespace Sinkii09.UIFramework
 
         // Bridges DOTween Tween to UniTask without requiring UNITASK_DOTWEEN_SUPPORT.
         // OnKill fires for both cancellation and post-complete cleanup; TrySet variants are safe if already resolved.
+        // Registration is disposed on complete/kill to prevent stale callbacks on DOTween's pooled tweens.
         private static UniTask AwaitTween(Tween tween, CancellationToken ct)
         {
             tween.SetUpdate(true);
             var tcs = new UniTaskCompletionSource();
-            tween.OnComplete(() => tcs.TrySetResult())
-                 .OnKill(() => tcs.TrySetCanceled());
+            CancellationTokenRegistration reg = default;
+            tween.OnComplete(() => { reg.Dispose(); tcs.TrySetResult(); })
+                 .OnKill(() => { reg.Dispose(); tcs.TrySetCanceled(); });
             if (ct.CanBeCanceled)
-                ct.Register(() => tween.Kill());
+                reg = ct.Register(() => tween.Kill());
             return tcs.Task;
         }
     }
