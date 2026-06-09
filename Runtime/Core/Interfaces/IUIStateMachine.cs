@@ -11,7 +11,11 @@ namespace Sinkii09.UIFramework
         void RegisterState<T>(T state) where T : IViewState;
         // Throws InvalidOperationException if T was never registered via RegisterState
         UniTask ChangeStateAsync<T>(CancellationToken ct = default) where T : IViewState;
-        /// <summary>Clears the current state pointer. Only call after deliberately bypassing ChangeStateAsync.</summary>
+        /// <summary>
+        /// Clears the current state pointer.
+        /// Called internally by UINavigator.ChangeStateAsync before every transition.
+        /// Call manually only when bypassing ChangeStateAsync (e.g. direct ShowAsync navigation).
+        /// </summary>
         void ResetState();
     }
 }

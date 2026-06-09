@@ -178,6 +178,14 @@ namespace Sinkii09.UIFramework
             {
                 await _stack.ClearAsync(ct);
                 RefreshLayerBlocking();
+                // Reset state pointer so UIStateMachine's same-state guard does not skip
+                // re-entry of the same state (e.g. restarting a game from WinView).
+                // OnExitAsync for the previous state is intentionally skipped: the ClearAsync
+                // above already handles all view cleanup. WARNING: this is safe only while
+                // every state's OnExitAsync performs view-only cleanup (e.g. CloseAllAsync).
+                // If any state adds non-view cleanup to OnExitAsync in the future, call
+                // OnExitAsync explicitly before ClearAsync instead.
+                _stateMachine.ResetState();
                 // _stateTransitionActive lets state OnEnterAsync call ShowAsync while _isTransitioning
                 // remains true — so IsTransitioning stays accurate for the full operation duration.
                 _stateTransitionActive = true;

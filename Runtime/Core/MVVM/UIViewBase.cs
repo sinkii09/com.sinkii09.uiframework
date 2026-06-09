@@ -44,6 +44,7 @@ namespace Sinkii09.UIFramework
                 externalCt, destroyCancellationToken);
             try
             {
+                OnPrepareForShow();
                 gameObject.SetActive(true);
                 if (_animator != null)
                     await _animator.ShowAsync(this, _showTransition, cts.Token);
@@ -84,6 +85,9 @@ namespace Sinkii09.UIFramework
             }
         }
 
+        // Called by ShowAsync before SetActive(true) — override to reset visual state (scales, alpha)
+        // so the first rendered frame after activation is already at the animation start position.
+        protected virtual void OnPrepareForShow() { }
         protected virtual UniTask OnShowAsync(CancellationToken ct) => UniTask.CompletedTask;
         protected virtual UniTask OnHideAsync(CancellationToken ct) => UniTask.CompletedTask;
 

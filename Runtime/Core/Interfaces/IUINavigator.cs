@@ -27,7 +27,11 @@ namespace Sinkii09.UIFramework
         UniTask PopAsync(CancellationToken ct = default);
         UniTask CloseAllAsync(CancellationToken ct = default);
         UniTask ChangeStateAsync<TState>(CancellationToken ct = default) where TState : IViewState;
-        /// <summary>Clears the state machine's current state pointer. Only call after deliberately bypassing ChangeStateAsync.</summary>
+        /// <summary>
+        /// Clears the state machine's current state pointer.
+        /// Called internally by ChangeStateAsync before every state transition — callers do not need to call this manually.
+        /// Call manually only when bypassing ChangeStateAsync (e.g. navigating via ShowAsync directly).
+        /// </summary>
         void ResetState();
     }
 }
