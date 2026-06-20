@@ -65,5 +65,31 @@ namespace Sinkii09.UIFramework
                 _isTransitioning = false;
             }
         }
+
+        // Restarts the current state in-place (exit → enter same state).
+        // Use instead of ChangeStateAsync<T> when the game is already in T and needs a full reset
+        // (e.g. Retry after game-over, Restart from pause), since the state machine's same-state
+        // guard would otherwise silently reject the transition.
+        public async UniTask RestartCurrentStateAsync(CancellationToken ct = default)
+        {
+            if (_isTransitioning)
+            {
+                Debug.LogWarning("[GameLifecycleManager] Transitioning — RestartCurrentStateAsync ignored.");
+                return;
+            }
+            var current = _stateMachine.CurrentState;
+            if (current == null) return;
+            _isTransitioning = true;
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _exitToken);
+                await current.OnExitAsync(cts.Token);
+                await current.OnEnterAsync(cts.Token);
+            }
+            finally
+            {
+                _isTransitioning = false;
+            }
+        }
     }
 }

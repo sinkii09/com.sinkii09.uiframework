@@ -16,6 +16,7 @@ namespace Sinkii09.UIFramework
         private readonly IUILoader _loader;
         private readonly IObjectResolver _container;
         private readonly UIRootLayerRefs _layers;
+        private volatile IObjectResolver _scopeContainer;
 
         // One cached instance per view type. Values are UIViewBase MonoBehaviours;
         // Unity overrides == so a null check detects destroyed objects after scene unload.
@@ -69,7 +70,7 @@ namespace Sinkii09.UIFramework
             try
             {
                 if (isNew) ReparentToLayer(instance);
-                scope = _container.CreateScope(builder =>
+                scope = (_scopeContainer ?? _container).CreateScope(builder =>
                 {
                     builder.RegisterInstance(instance);
                     builder.Register(vmType, Lifetime.Scoped);
@@ -91,6 +92,18 @@ namespace Sinkii09.UIFramework
                 }
                 throw;
             }
+        }
+
+        public void SetScopeContainer(IObjectResolver resolver)
+        {
+            if (resolver == null) throw new ArgumentNullException(nameof(resolver));
+            _scopeContainer = resolver;
+        }
+
+        public void ResetScopeContainer(IObjectResolver expected = null)
+        {
+            if (expected == null || _scopeContainer == expected)
+                _scopeContainer = null;
         }
 
         // VContainer calls Dispose() when the owning LifetimeScope is destroyed.
@@ -117,6 +130,10 @@ namespace Sinkii09.UIFramework
             where TView : IUIView
             where TViewModel : class, IViewModel
         {
+            // Bail early if already cancelled — prevents Initialize(args) from running on cached views
+            // when the caller's session token was cancelled before ShowAsync was even dispatched.
+            ct.ThrowIfCancellationRequested();
+
             // Cache lookup before try — no resources allocated yet, nothing to clean up on miss.
             bool isNew = !(_cache.TryGetValue(typeof(TView), out var viewBase) && viewBase != null);
             TView view = isNew ? default : (TView)(IUIView)viewBase;
@@ -136,7 +153,7 @@ namespace Sinkii09.UIFramework
                     viewBase = castBase;
                 }
 
-                scope = _container.CreateScope(builder =>
+                scope = (_scopeContainer ?? _container).CreateScope(builder =>
                 {
                     builder.RegisterInstance(view);
                     builder.Register<TViewModel>(Lifetime.Scoped);
@@ -170,7 +187,8 @@ namespace Sinkii09.UIFramework
         // Loads and instantiates the prefab without injection — callers inject via their child scope.
         private async UniTask<TView> InstantiateViewAsync<TView>(CancellationToken ct) where TView : IUIView
         {
-            string key = typeof(TView).Name;
+            var keyAttr = Attribute.GetCustomAttribute(typeof(TView), typeof(UIViewKeyAttribute)) as UIViewKeyAttribute;
+            string key = keyAttr?.Key ?? typeof(TView).Name;
             var prefab = await _loader.LoadAsync<UIViewBase>(key, ct);
             ct.ThrowIfCancellationRequested();
             var instance = UnityEngine.Object.Instantiate(prefab);
