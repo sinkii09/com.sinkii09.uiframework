@@ -44,15 +44,31 @@ namespace Sinkii09.UIFramework
             // changes, same-state re-entry (e.g. MemoryGameState → MemoryGameState) will
             // attempt a double-clear while _isTransitioning is true.
             var previous = _currentState;
+            bool exitCompleted = false;
             try
             {
-                if (previous != null) await previous.OnExitAsync(ct);
+                if (previous != null)
+                {
+                    await previous.OnExitAsync(ct);
+                    exitCompleted = true;
+                }
                 await next.OnEnterAsync(ct);
                 _currentState = next;
             }
+            catch (OperationCanceledException)
+            {
+                // External cancellation: previous either didn't exit (exitCompleted=false → still valid current)
+                // or exited cleanly and enter was aborted. Roll back to previous so the caller
+                // can retry the same transition without a double-exit on the next attempt.
+                _currentState = previous;
+                throw;
+            }
             catch
             {
-                _currentState = previous;
+                // Unexpected exception after OnExitAsync succeeded: previous has run OnExitAsync
+                // and is in an indeterminate state. Set null rather than restoring it as current —
+                // a subsequent ChangeStateAsync will not call OnExitAsync on the already-exited state.
+                _currentState = exitCompleted ? null : previous;
                 throw;
             }
         }

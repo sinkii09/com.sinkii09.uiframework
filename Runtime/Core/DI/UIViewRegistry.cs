@@ -28,6 +28,8 @@ namespace Sinkii09.UIFramework
     public static class UIViewRegistry
     {
         private static readonly List<UIViewRegistration> _registrations = new();
+        private static readonly HashSet<string> _registeredKeys = new();
+        private static readonly HashSet<Type> _registeredViewTypes = new();
 
         public static IReadOnlyList<UIViewRegistration> Registrations => _registrations;
 
@@ -35,7 +37,12 @@ namespace Sinkii09.UIFramework
         // fields inconsistently across Unity versions. Clearing here guarantees a fresh scan
         // on every Play session so newly added view types are never silently missed.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetOnDomainReload() => _registrations.Clear();
+        private static void ResetOnDomainReload()
+        {
+            _registrations.Clear();
+            _registeredKeys.Clear();
+            _registeredViewTypes.Clear();
+        }
 
         public static void AutoRegister()
         {
@@ -66,6 +73,18 @@ namespace Sinkii09.UIFramework
 
                     var keyAttr = (UIViewKeyAttribute)Attribute.GetCustomAttribute(type, typeof(UIViewKeyAttribute));
                     var key = keyAttr?.Key ?? type.Name;
+
+                    if (!_registeredKeys.Add(key))
+                    {
+                        Debug.LogError($"[UIViewRegistry] Duplicate UIViewKey \"{key}\" found on {type.FullName}. " +
+                                       "The second registration is ignored — views sharing a key will load the wrong prefab.");
+                        continue;
+                    }
+                    if (!_registeredViewTypes.Add(type))
+                    {
+                        Debug.LogError($"[UIViewRegistry] View type {type.FullName} registered twice. Second registration ignored.");
+                        continue;
+                    }
 
                     _registrations.Add(new UIViewRegistration(type, vmType, key));
                     // ViewModels are NOT registered here — they are registered Scoped inside

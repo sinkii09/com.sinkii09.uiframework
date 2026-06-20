@@ -24,8 +24,19 @@ namespace Sinkii09.UIFramework
                 Debug.LogWarning($"[NavigationStack] Max depth {_maxDepth} reached. Push of {view.ViewId} ignored.");
                 return;
             }
-            _views.Add(view);
-            await view.ShowAsync(ct);
+            // Add AFTER ShowAsync succeeds — if cancelled mid-show the view never enters the stack,
+            // preventing phantom entries that PopAsync would later try to hide.
+            try
+            {
+                await view.ShowAsync(ct);
+                _views.Add(view);
+            }
+            catch
+            {
+                // ShowAsync threw (including OperationCanceledException) — view was never shown;
+                // do not add to stack. Re-throw so UINavigator knows the push failed.
+                throw;
+            }
         }
 
         public async UniTask<IUIView> PopAsync(CancellationToken ct = default)

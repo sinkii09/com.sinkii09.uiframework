@@ -40,12 +40,15 @@ namespace Sinkii09.UIFramework
 
         public override async UniTask HideAsync(CancellationToken externalCt = default)
         {
-            if (_viewModel == null) return;
+            // Log programmer error but do NOT early-return — base.HideAsync must always run
+            // so that IsVisible and SetActive(false) are set correctly regardless of VM state.
+            if (_viewModel == null)
+                UnityEngine.Debug.LogError($"[UIView] HideAsync called on uninitialized view {GetType().Name}. Ensure InitializeAsync ran before HideAsync.");
             await base.HideAsync(externalCt);
-            // null-guard: pool-return race can null _viewModel while animator was awaited
+            // null-guard: FactoryReset can null _viewModel while animator was awaited (pool-return race)
             if (_viewModel == null) return;
             // Teardown AFTER animation so active bindings remain valid during the hide transition
-            _viewModel.Show();
+            _viewModel.NotifyHide();
             _showDisposables.Dispose();
             _showDisposables = new DisposableBag();
         }

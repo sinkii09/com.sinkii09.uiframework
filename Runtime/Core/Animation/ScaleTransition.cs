@@ -8,10 +8,20 @@ namespace Sinkii09.UIFramework
     {
         public Vector3 StartScale = new Vector3(0.8f, 0.8f, 1f);
 
-        public override Tween CreateShowTween(UIViewBase view) =>
-            view.transform.DOScale(Vector3.one, Duration).From(StartScale).SetEase(EaseType);
+        public override Tween CreateShowTween(UIViewBase view)
+        {
+            var t = view.transform;
+            // OnKill: restore to StartScale (pre-show state) so a cancelled show leaves no mid-tween scale.
+            return t.DOScale(Vector3.one, Duration).From(StartScale).SetEase(EaseType)
+                .OnKill(() => { if (t != null) t.localScale = StartScale; });
+        }
 
-        public override Tween CreateHideTween(UIViewBase view) =>
-            view.transform.DOScale(StartScale, Duration).From(Vector3.one).SetEase(EaseType);
+        public override Tween CreateHideTween(UIViewBase view)
+        {
+            var t = view.transform;
+            // OnKill: restore to Vector3.one (visible/resting state) so a cancelled hide leaves no mid-tween scale.
+            return t.DOScale(StartScale, Duration).From(Vector3.one).SetEase(EaseType)
+                .OnKill(() => { if (t != null) t.localScale = Vector3.one; });
+        }
     }
 }

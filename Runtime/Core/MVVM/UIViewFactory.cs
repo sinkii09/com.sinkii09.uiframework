@@ -22,6 +22,11 @@ namespace Sinkii09.UIFramework
         // Unity overrides == so a null check detects destroyed objects after scene unload.
         private readonly Dictionary<Type, UIViewBase> _cache = new();
 
+        // In-flight creation tasks keyed by view type. If two async callers request the same view
+        // type concurrently (main-thread interleaving — not threading), the second awaits the first
+        // result instead of instantiating a duplicate GameObject.
+        private readonly Dictionary<Type, UniTaskCompletionSource<IUIView>> _pending = new();
+
         [Inject]
         public UIViewFactory(IUILoader loader, IObjectResolver container, UIRootLayerRefs layers)
         {
@@ -134,8 +139,18 @@ namespace Sinkii09.UIFramework
             // when the caller's session token was cancelled before ShowAsync was even dispatched.
             ct.ThrowIfCancellationRequested();
 
+            var viewType = typeof(TView);
+
+            // Deduplication: if a creation for this type is already in-flight (async interleave on
+            // main thread), await the existing task instead of instantiating a duplicate GO.
+            if (_pending.TryGetValue(viewType, out var inFlight))
+                return (TView)await inFlight.Task;
+
+            var tcs = new UniTaskCompletionSource<IUIView>();
+            _pending[viewType] = tcs;
+
             // Cache lookup before try — no resources allocated yet, nothing to clean up on miss.
-            bool isNew = !(_cache.TryGetValue(typeof(TView), out var viewBase) && viewBase != null);
+            bool isNew = !(_cache.TryGetValue(viewType, out var viewBase) && viewBase != null);
             TView view = isNew ? default : (TView)(IUIView)viewBase;
             if (!isNew) viewBase.FactoryReset();
 
@@ -149,7 +164,7 @@ namespace Sinkii09.UIFramework
                     view = await InstantiateViewAsync<TView>(ct);
                     if (view is not UIViewBase castBase)
                         throw new InvalidOperationException(
-                            $"[UIViewFactory] {typeof(TView).Name} must extend UIViewBase.");
+                            $"[UIViewFactory] {viewType.Name} must extend UIViewBase.");
                     viewBase = castBase;
                 }
 
@@ -165,11 +180,24 @@ namespace Sinkii09.UIFramework
                 var viewModel = scope.Resolve<TViewModel>();
                 afterResolve?.Invoke(viewModel);
                 await CastAndInitialize<TView, TViewModel>(view, viewModel, scope, ct);
-                _cache[typeof(TView)] = viewBase;
+                _cache[viewType] = viewBase;
+                tcs.TrySetResult(view);
                 return view;
             }
-            catch
+            catch (OperationCanceledException)
             {
+                tcs.TrySetCanceled();
+                scope?.Dispose();
+                if (isNew && viewBase != null)
+                {
+                    _cache.Remove(viewType);
+                    UnityEngine.Object.Destroy(viewBase.gameObject);
+                }
+                throw;
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
                 scope?.Dispose();
                 // On cache-miss failure: destroy the newly created GO (if instantiation succeeded)
                 // and clear the cache entry.
@@ -177,10 +205,14 @@ namespace Sinkii09.UIFramework
                 // ShowAsync attempt can retry with a fresh scope.
                 if (isNew && viewBase != null)
                 {
-                    _cache.Remove(typeof(TView));
+                    _cache.Remove(viewType);
                     UnityEngine.Object.Destroy(viewBase.gameObject);
                 }
                 throw;
+            }
+            finally
+            {
+                _pending.Remove(viewType);
             }
         }
 

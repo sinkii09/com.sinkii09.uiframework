@@ -15,8 +15,9 @@ namespace Sinkii09.UIFramework
 
         public virtual void OnShow() { }
 
-        public void Show()
+        public void NotifyHide()
         {
+            if (_disposed) return;
             OnHide();
             _showDisposables.Dispose();
             _showDisposables = new DisposableBag();

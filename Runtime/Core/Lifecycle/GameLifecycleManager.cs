@@ -12,16 +12,19 @@ namespace Sinkii09.UIFramework
     public sealed class GameLifecycleManager : IAsyncStartable
     {
         private readonly IUIStateMachine _stateMachine;
+        private readonly IUINavigator _navigator;
         private readonly CancellationToken _exitToken;
         private bool _isTransitioning;
 
         [Inject]
         public GameLifecycleManager(
             IUIStateMachine stateMachine,
+            IUINavigator navigator,
             BootState bootState,
             LoadingState loadingState)
         {
             _stateMachine = stateMachine;
+            _navigator = navigator;
             _exitToken = Application.exitCancellationToken;
             stateMachine.RegisterState(bootState);
             stateMachine.RegisterState(loadingState);
@@ -84,6 +87,9 @@ namespace Sinkii09.UIFramework
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _exitToken);
                 await current.OnExitAsync(cts.Token);
+                // Clear any views OnExitAsync left on the navigator stack. If OnExitAsync already
+                // called CloseAllAsync, this is a no-op (ClearAsync on empty stack exits immediately).
+                await _navigator.CloseAllAsync(cts.Token);
                 await current.OnEnterAsync(cts.Token);
             }
             finally

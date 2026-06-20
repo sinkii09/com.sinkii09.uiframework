@@ -37,7 +37,8 @@ namespace Sinkii09.UIFramework
             cg.blocksRaycasts = false;
             try
             {
-                await AwaitTween(transition.CreateShowTween(viewBase), ct);
+                var showTween = transition.CreateShowTween(viewBase).SetLink(viewBase.gameObject);
+                await showTween.AwaitAsync(ct);
                 cg.interactable = true;
                 cg.blocksRaycasts = true;
             }
@@ -78,7 +79,8 @@ namespace Sinkii09.UIFramework
             cg.blocksRaycasts = false;
             try
             {
-                await AwaitTween(transition.CreateHideTween(viewBase), ct);
+                var hideTween = transition.CreateHideTween(viewBase).SetLink(viewBase.gameObject);
+                await hideTween.AwaitAsync(ct);
             }
             catch (OperationCanceledException)
             {
@@ -88,21 +90,6 @@ namespace Sinkii09.UIFramework
                 cg.blocksRaycasts = true;
                 throw;
             }
-        }
-
-        // Bridges DOTween Tween to UniTask without requiring UNITASK_DOTWEEN_SUPPORT.
-        // OnKill fires for both cancellation and post-complete cleanup; TrySet variants are safe if already resolved.
-        // Registration is disposed on complete/kill to prevent stale callbacks on DOTween's pooled tweens.
-        private static UniTask AwaitTween(Tween tween, CancellationToken ct)
-        {
-            tween.SetUpdate(true);
-            var tcs = new UniTaskCompletionSource();
-            CancellationTokenRegistration reg = default;
-            tween.OnComplete(() => { reg.Dispose(); tcs.TrySetResult(); })
-                 .OnKill(() => { reg.Dispose(); tcs.TrySetCanceled(); });
-            if (ct.CanBeCanceled)
-                reg = ct.Register(() => tween.Kill());
-            return tcs.Task;
         }
     }
 }
