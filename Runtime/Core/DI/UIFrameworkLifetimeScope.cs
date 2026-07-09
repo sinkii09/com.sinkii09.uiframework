@@ -92,13 +92,13 @@ namespace Sinkii09.UIFramework
 
         private static void RegisterLoader(IContainerBuilder builder, UIFrameworkConfig config)
         {
-#if ADDRESSABLES
+
             if (config.LoaderMode == LoaderMode.Addressables)
             {
                 builder.Register<IUILoader, AddressablesUILoader>(Lifetime.Singleton);
                 return;
             }
-#endif
+
             builder.Register<IUILoader, ResourcesUILoader>(Lifetime.Singleton);
         }
 

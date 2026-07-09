@@ -1,4 +1,3 @@
-#if ADDRESSABLES
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using System.Threading;
@@ -78,4 +77,3 @@ namespace Sinkii09.UIFramework
         }
     }
 }
-#endif
