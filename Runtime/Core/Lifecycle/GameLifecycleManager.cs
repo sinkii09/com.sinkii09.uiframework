@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -13,6 +14,7 @@ namespace Sinkii09.UIFramework
     {
         private readonly IUIStateMachine _stateMachine;
         private readonly IUINavigator _navigator;
+        private readonly ITransitionOverlay _overlay;
         private readonly CancellationToken _exitToken;
         private bool _isTransitioning;
 
@@ -20,14 +22,44 @@ namespace Sinkii09.UIFramework
         public GameLifecycleManager(
             IUIStateMachine stateMachine,
             IUINavigator navigator,
+            ITransitionOverlay overlay,
             BootState bootState,
             LoadingState loadingState)
         {
             _stateMachine = stateMachine;
             _navigator = navigator;
+            _overlay = overlay;
             _exitToken = Application.exitCancellationToken;
             stateMachine.RegisterState(bootState);
             stateMachine.RegisterState(loadingState);
+        }
+
+        // Shows the overlay, awaits it, and swallows any failure — the overlay is decorative and
+        // must never block or fail a state transition. Hide is the caller's responsibility.
+        private async UniTask ShowOverlaySafeAsync(CancellationToken ct)
+        {
+            try
+            {
+                await _overlay.ShowAsync(ct);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[GameLifecycleManager] overlay show failed: {e}");
+            }
+        }
+
+        // CancellationToken.None so a cancelled/faulted transition still tears the overlay down.
+        // UIViewBase links destroyCancellationToken internally, so app-shutdown still stops it.
+        private async UniTask HideOverlaySafeAsync()
+        {
+            try
+            {
+                await _overlay.HideAsync(CancellationToken.None);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[GameLifecycleManager] overlay hide failed: {e}");
+            }
         }
 
         // Called by game developer's bootstrap IInitializable.Initialize() to register
@@ -61,10 +93,12 @@ namespace Sinkii09.UIFramework
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _exitToken);
+                await ShowOverlaySafeAsync(cts.Token);
                 await _stateMachine.ChangeStateAsync<T>(cts.Token);
             }
             finally
             {
+                await HideOverlaySafeAsync();
                 _isTransitioning = false;
             }
         }
@@ -86,6 +120,7 @@ namespace Sinkii09.UIFramework
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _exitToken);
+                await ShowOverlaySafeAsync(cts.Token);
                 await current.OnExitAsync(cts.Token);
                 // Clear any views OnExitAsync left on the navigator stack. If OnExitAsync already
                 // called CloseAllAsync, this is a no-op (ClearAsync on empty stack exits immediately).
@@ -94,6 +129,7 @@ namespace Sinkii09.UIFramework
             }
             finally
             {
+                await HideOverlaySafeAsync();
                 _isTransitioning = false;
             }
         }

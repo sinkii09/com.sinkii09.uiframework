@@ -36,7 +36,8 @@ namespace Sinkii09.UIFramework
                 throw new InvalidOperationException(
                     "[LoadingState] TargetScene not set. Call ILoadingContext.Set() before ChangeStateAsync<LoadingState>().");
 
-            // TODO: show LoadingView via IUINavigator when LoadingView is created
+            // Overlay show/hide is owned by GameLifecycleManager around the whole
+            // ChangeStateAsync<LoadingState> call (including this scene load) — not by this state.
             await _sceneLoader.LoadAsync(_loadingContext.TargetScene, LoadSceneMode.Single, ct);
 
             // Consume context before invoking callback to prevent stale re-entry if
@@ -50,7 +51,7 @@ namespace Sinkii09.UIFramework
 
         public UniTask OnExitAsync(CancellationToken ct = default)
         {
-            // TODO: hide LoadingView via IUINavigator when LoadingView is created
+            // See OnEnterAsync — overlay is GameLifecycleManager's responsibility, not this state's.
             return UniTask.CompletedTask;
         }
     }

@@ -83,6 +83,14 @@ namespace Sinkii09.UIFramework
                 IsVisible = false;
                 gameObject.SetActive(false);
             }
+            catch
+            {
+                // Non-cancellation exception from animator or OnHideAsync — deactivate before
+                // rethrowing so the GO is not left active/stuck with IsVisible still true.
+                IsVisible = false;
+                gameObject.SetActive(false);
+                throw;
+            }
         }
 
         // Called by ShowAsync before SetActive(true) — override to reset visual state (scales, alpha)

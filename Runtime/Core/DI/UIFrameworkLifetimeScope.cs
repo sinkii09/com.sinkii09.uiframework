@@ -71,6 +71,16 @@ namespace Sinkii09.UIFramework
             builder.Register<IBackButtonSource, NewInputSystemBackButtonSource>(Lifetime.Singleton);
             builder.RegisterEntryPoint<BackButtonRouter>();
 
+            // Resident full-screen overlay (optional per-game). Present anywhere in the scene -> real
+            // TransitionOverlayView; absent -> NullTransitionOverlay so GameLifecycleManager
+            // never needs to null-check. Scene-wide search (not GetComponentInChildren) to match
+            // RegisterComponentInHierarchy's own resolution scope — VContainer's FindComponentProvider
+            // searches the whole scene, not just this LifetimeScope's subtree.
+            if (FindAnyObjectByType<TransitionOverlayView>(FindObjectsInactive.Include) != null)
+                builder.RegisterComponentInHierarchy<TransitionOverlayView>().As<ITransitionOverlay>();
+            else
+                builder.RegisterInstance<ITransitionOverlay>(new NullTransitionOverlay());
+
             // Scans assemblies for concrete UIView<T> subclasses; populates UIViewRegistry.Registrations.
             UIViewRegistry.AutoRegister();
             builder.RegisterInstance(UIViewRegistry.Registrations);
