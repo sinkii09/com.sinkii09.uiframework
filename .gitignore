@@ -1,0 +1,24 @@
+# IDE
+.vs/
+.idea/
+*.csproj
+*.sln
+*.user
+*.userprefs
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# dotnet
+[Bb]in/
+[Oo]bj/
+
+# In case this package is ever opened directly as a Unity test project
+/Library/
+/Temp/
+/Logs/
+/UserSettings/
+/Build/
+/Builds/

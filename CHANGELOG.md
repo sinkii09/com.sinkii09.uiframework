@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `ResourceCounter` control (`Runtime/Controls/Core/`) — icon + "current/max" label + button, joins the `Badge`/`IconLabel`/`ProgressBar` `UIControlBase` family. Button click exposed as `OnClickedAsObservable` (R3), same outward-event convention as `Draggable`/`DropZone`.
+- `GameObject/UI/UIFramework/*` quick-create menu items (`Editor/Tools/MenuItems/CreateUIControlMenuItems.cs`) for `Badge`, `Icon Label`, `Progress Bar`, `Resource Counter` — pre-wired hierarchy + private field wiring, auto-creates a `Canvas`/`EventSystem` if the scene has none, matching Unity's own `GameObject > UI > Button` UX.
+
+### Fixed
+- `package.json` was missing a `com.unity.inputsystem` dependency entry despite `Runtime` hard-referencing `Unity.InputSystem` since 1.0.0 — added (also now required by the new `Editor.Tools` menu items).
+
 ## [1.0.0] - 2026-05-31
 
 ### Added

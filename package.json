@@ -5,7 +5,8 @@
     "description": "Unity 6 reactive UI framework: R3 MVVM, VContainer DI, DOTween animations, game lifecycle.",
     "unity": "6000.0",
     "dependencies": {
-        "com.unity.addressables": "2.6.0"
+        "com.unity.addressables": "2.6.0",
+        "com.unity.inputsystem": "1.19.0"
     },
     "keywords": ["ui", "mvvm", "reactive", "vcontainer", "r3"],
     "author": {

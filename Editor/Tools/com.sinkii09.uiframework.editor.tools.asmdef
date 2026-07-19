@@ -5,7 +5,9 @@
         "Sinkii09.UIFramework",
         "UniTask",
         "VContainer",
-        "VContainer.Unity"
+        "VContainer.Unity",
+        "Unity.TextMeshPro",
+        "Unity.InputSystem"
     ],
     "includePlatforms": ["Editor"],
     "excludePlatforms": [],
