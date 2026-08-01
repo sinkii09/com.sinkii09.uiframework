@@ -26,11 +26,13 @@ namespace Sinkii09.UIFramework
         UniTask HideAsync<T>(CancellationToken ct = default) where T : IUIView;
         UniTask PopAsync(CancellationToken ct = default);
         UniTask CloseAllAsync(CancellationToken ct = default);
-        UniTask ChangeStateAsync<TState>(CancellationToken ct = default) where TState : IViewState;
         /// <summary>
         /// Clears the state machine's current state pointer.
-        /// Called internally by ChangeStateAsync before every state transition — callers do not need to call this manually.
-        /// Call manually only when bypassing ChangeStateAsync (e.g. navigating via ShowAsync directly).
+        /// As of v1.2.0, the internal ChangeStateAsync no longer calls this automatically — doing so
+        /// skipped the previous state's OnExitAsync, silently dropping non-view cleanup. Call this
+        /// manually only for same-state re-entry when GameLifecycleManager.RestartCurrentStateAsync
+        /// is not applicable (e.g. bypassing the lifecycle manager entirely via direct ShowAsync
+        /// navigation) — the caller is responsible for any cleanup ResetState() skips.
         /// </summary>
         void ResetState();
     }

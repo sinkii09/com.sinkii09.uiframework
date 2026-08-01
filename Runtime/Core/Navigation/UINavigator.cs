@@ -166,7 +166,10 @@ namespace Sinkii09.UIFramework
 
         // Always clears the stack before entering the new state.
         // For overlay states (Pause, GameOver) use ShowAsync<T>() instead.
-        public async UniTask ChangeStateAsync<TState>(CancellationToken ct = default) where TState : IViewState
+        // Internal: GameLifecycleManager is the only sanctioned caller. Game code uses
+        // GameLifecycleManager.ChangeStateAsync<T> / RestartCurrentStateAsync so the transition
+        // overlay and the lifecycle re-entrancy guard are always applied.
+        internal async UniTask ChangeStateAsync<TState>(CancellationToken ct = default) where TState : IViewState
         {
             if (_isTransitioning)
             {
@@ -178,14 +181,12 @@ namespace Sinkii09.UIFramework
             {
                 await _stack.ClearAsync(ct);
                 RefreshLayerBlocking();
-                // Reset state pointer so UIStateMachine's same-state guard does not skip
-                // re-entry of the same state (e.g. restarting a game from WinView).
-                // OnExitAsync for the previous state is intentionally skipped: the ClearAsync
-                // above already handles all view cleanup. WARNING: this is safe only while
-                // every state's OnExitAsync performs view-only cleanup (e.g. CloseAllAsync).
-                // If any state adds non-view cleanup to OnExitAsync in the future, call
-                // OnExitAsync explicitly before ClearAsync instead.
-                _stateMachine.ResetState();
+                // NOTE: ResetState() is deliberately NOT called here. It nulled _currentState, which
+                // made UIStateMachine skip previous.OnExitAsync — silently dropping non-view cleanup
+                // (timeScale restore, subscription disposal, spawned-object teardown). Some states
+                // (e.g. AircraftGameplayState) rely on OnExitAsync running for exactly this reason.
+                // Same-state re-entry is GameLifecycleManager.RestartCurrentStateAsync's job, not this
+                // method's — ResetState() remains available as a manual escape hatch via IUINavigator.
                 // _stateTransitionActive lets state OnEnterAsync call ShowAsync while _isTransitioning
                 // remains true — so IsTransitioning stays accurate for the full operation duration.
                 _stateTransitionActive = true;

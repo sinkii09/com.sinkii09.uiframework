@@ -13,8 +13,10 @@ namespace Sinkii09.UIFramework
         UniTask ChangeStateAsync<T>(CancellationToken ct = default) where T : IViewState;
         /// <summary>
         /// Clears the current state pointer.
-        /// Called internally by UINavigator.ChangeStateAsync before every transition.
-        /// Call manually only when bypassing ChangeStateAsync (e.g. direct ShowAsync navigation).
+        /// As of v1.2.0, UINavigator.ChangeStateAsync no longer calls this automatically — doing so
+        /// skipped the previous state's OnExitAsync, silently dropping non-view cleanup. Call this
+        /// manually only when bypassing the normal transition path entirely (e.g. direct ShowAsync
+        /// navigation) — the caller is responsible for any cleanup ResetState() skips.
         /// </summary>
         void ResetState();
     }

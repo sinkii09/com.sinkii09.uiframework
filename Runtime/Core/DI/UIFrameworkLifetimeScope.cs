@@ -84,7 +84,7 @@ namespace Sinkii09.UIFramework
             // Scans assemblies for concrete UIView<T> subclasses; populates UIViewRegistry.Registrations.
             UIViewRegistry.AutoRegister();
             builder.RegisterInstance(UIViewRegistry.Registrations);
-            builder.Register<IUINavigator, UINavigator>(Lifetime.Singleton);
+            builder.Register<IUINavigator, UINavigator>(Lifetime.Singleton).AsSelf();
             
             // --- Game Lifecycle ---
             builder.Register<ISceneLoader, SceneLoader>(Lifetime.Singleton);

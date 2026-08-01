@@ -13,7 +13,7 @@ namespace Sinkii09.UIFramework
     public sealed class GameLifecycleManager : IAsyncStartable
     {
         private readonly IUIStateMachine _stateMachine;
-        private readonly IUINavigator _navigator;
+        private readonly UINavigator _navigator; // concrete: ChangeStateAsync is internal
         private readonly ITransitionOverlay _overlay;
         private readonly CancellationToken _exitToken;
         private bool _isTransitioning;
@@ -21,7 +21,7 @@ namespace Sinkii09.UIFramework
         [Inject]
         public GameLifecycleManager(
             IUIStateMachine stateMachine,
-            IUINavigator navigator,
+            UINavigator navigator,
             ITransitionOverlay overlay,
             BootState bootState,
             LoadingState loadingState)
@@ -73,7 +73,7 @@ namespace Sinkii09.UIFramework
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _exitToken);
-                await _stateMachine.ChangeStateAsync<BootState>(cts.Token);
+                await _navigator.ChangeStateAsync<BootState>(cts.Token);
             }
             finally
             {
@@ -94,7 +94,7 @@ namespace Sinkii09.UIFramework
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _exitToken);
                 await ShowOverlaySafeAsync(cts.Token);
-                await _stateMachine.ChangeStateAsync<T>(cts.Token);
+                await _navigator.ChangeStateAsync<T>(cts.Token);
             }
             finally
             {
