@@ -94,6 +94,10 @@ namespace Sinkii09.UIFramework
             // Game-specific states (GameplayState, PauseState, etc.) are registered by the game
             // developer's IInitializable bootstrap via GameLifecycleManager.RegisterState<T>().
             builder.RegisterEntryPoint<GameLifecycleManager>(Lifetime.Singleton).AsSelf();
+
+            // --- Persistence ---
+            builder.Register<IStorageBackend, LocalFileStorageBackend>(Lifetime.Singleton);
+            builder.Register<ISaveService, JsonSaveService>(Lifetime.Singleton);
         }
 
         // Override in your game's LifetimeScope to substitute a custom BootState subclass.

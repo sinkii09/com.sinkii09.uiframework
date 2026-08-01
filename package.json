@@ -6,7 +6,8 @@
     "unity": "6000.0",
     "dependencies": {
         "com.unity.addressables": "2.6.0",
-        "com.unity.inputsystem": "1.19.0"
+        "com.unity.inputsystem": "1.19.0",
+        "com.unity.nuget.newtonsoft-json": "3.2.2"
     },
     "keywords": ["ui", "mvvm", "reactive", "vcontainer", "r3"],
     "author": {
