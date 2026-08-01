@@ -22,3 +22,8 @@ Thumbs.db
 /UserSettings/
 /Build/
 /Builds/
+
+# Planning docs — this repo ships as a UPM package, so plans/ would be imported
+# into every consuming project. Kept local instead.
+/plans/
+/plans.meta
