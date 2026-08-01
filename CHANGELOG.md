@@ -2,6 +2,85 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-01
+
+A 4-way parallel adversarial review of the whole framework (101 files) re-verified every CRITICAL
+finding the 2026-06-20 review claimed fixed, plus a fresh pass over code added since. 4 of 9 old
+fixes turned out to be only partial (the fix landed on one of two parallel code paths, not both);
+5 new CRITICALs were found. This release closes the "Phase 1 — correctness" cluster: 5 findings
+(C1/C2/C3/P1/P2), each closed with a dedicated regression test, verified by reverting each fix in
+isolation and confirming its test goes red before restoring it. Full findings:
+`plans/reports/code-review-260801-2110-uiframework-consolidated.md` in the consuming project.
+
+### BREAKING
+- **`IUINavigator.ChangeStateAsync<TState>` removed from the public interface.** It now lives as an
+  `internal` method on the concrete `UINavigator` class, reachable only by `GameLifecycleManager`
+  (which now depends on the concrete `UINavigator` type, not the interface, specifically to reach
+  it). State transitions go through `GameLifecycleManager.ChangeStateAsync<T>()` for a different
+  state, or `RestartCurrentStateAsync()` for same-state re-entry (e.g. Retry). `IUINavigator.ResetState()`
+  is unchanged and still public. **Migration:** any direct `_navigator.ChangeStateAsync<T>()` call
+  in consuming code must become `_lifecycle.ChangeStateAsync<T>()` (different state) or
+  `_lifecycle.RestartCurrentStateAsync()` (same state — a plain `ChangeStateAsync` call on the
+  current state now hits the state machine's same-state guard and silently no-ops).
+- **`GameLifecycleManager`-driven and `UINavigator`-driven state transitions now run the previous
+  state's `OnExitAsync`.** Previously `UINavigator.ChangeStateAsync` called
+  `IUIStateMachine.ResetState()` before every transition, which nulled the current-state pointer and
+  made the state machine skip `OnExitAsync` entirely — silently dropping any non-view cleanup a
+  state performed there (`Time.timeScale` restore, subscription disposal, spawned-object teardown).
+  If a custom `IGameState`/`IViewState` has cleanup in `OnExitAsync` that appeared to never run
+  before, it will start running now — audit before upgrading.
+- **A cancelled `IUIView.ShowAsync` now throws `OperationCanceledException` instead of returning
+  normally.** `NavigationStack` no longer pushes a never-shown view onto the stack as a hidden
+  phantom entry. If any code relied on a cancelled `ShowAsync` silently "succeeding" (including via
+  `.Forget()`), it will now see the exception propagate — wrap with
+  `try/catch (OperationCanceledException)` at the call site if needed. `HideAsync` is deliberately
+  **not** changed — it still swallows cancellation, since `NavigationStack.PopAsync` already treats
+  a cancelled hide as "hidden, remove from stack," and rethrowing there would strand an invisible
+  view instead.
+- **The type-erased `UIViewFactory.CreateAsync` overload now binds the created view in DI under its
+  concrete type**, matching the generic overload (was `UIViewBase` on this path only). A ViewModel
+  injecting `UIViewBase` directly (uncommon) must switch to the concrete view type.
+
+### Fixed
+- **Duplicate view instantiation on the default auto-registration path.** `UIViewFactory` carried
+  two parallel ~90-line creation implementations; the 2026-06-20 in-flight dedup fix (`_pending`)
+  only covered the manual `Register<>()` path. `UINavigator` calls the *other* (type-erased) path
+  for every auto-registered view, so the dedup guard was dead on the framework's default navigation
+  path for over a month. Both overloads (plus the `TArgs` overload) now delegate to one
+  `CreateCoreAsync`, closing the race for every caller. Also closes the Addressables
+  handle-release race for `AddressablesUILoader`, whose only in-framework caller is this factory.
+- **`GameLifecycleManager` bypassed `UINavigator` entirely**, calling `IUIStateMachine.ChangeStateAsync`
+  directly — making the navigator's nav-stack-clearing dead code for every GLM-driven transition,
+  and leaving `UINavigator._isTransitioning` unable to protect against a concurrent direct-navigator
+  call landing mid-transition. Confirmed causing real inconsistency in the consuming project: one
+  feature routed through `GameLifecycleManager` correctly, another called the navigator directly —
+  two features on incompatible navigation paths. Fixed by routing every GLM transition through the
+  (now internal) `UINavigator.ChangeStateAsync`.
+- **Transition cancel-restore never actually ran, for any built-in transition, ever.**
+  `TweenExtensions.AwaitAsync` calls `tween.OnComplete(...).OnKill(...)` on every awaited tween —
+  DOTween's setters *replace*, not chain, so the `.OnKill(...)` restore callback each transition
+  installed at tween-creation time was silently overwritten the moment the tween was awaited (always).
+  A cancelled Show/Hide could leave `transform.localScale`/`anchoredPosition` at an arbitrary
+  mid-tween value. Fixed by moving restore-on-cancel out of any tween callback entirely, into
+  `DOTweenUIAnimator`'s own `catch (OperationCanceledException)` blocks (which already restore
+  `CanvasGroup.alpha` for the same failure mode) via a new `UITransition.RestoreOnCancel(view)`
+  virtual hook.
+- **`UIStateMachine`'s cancellation-path rollback still double-exited a state.** The 2026-06-20 fix
+  covered the general-exception branch (`_currentState = exitCompleted ? null : previous`) but the
+  `OperationCanceledException` branch still unconditionally rolled back to `previous` — reintroducing
+  a double-`OnExitAsync` on the next transition specifically when cancellation landed after
+  `OnExitAsync` had already completed. Both branches now share the same rule.
+
+### Added
+- `UITransition.RestoreOnCancel(UIViewBase view)` — virtual hook for transform restore-on-cancel.
+  Must stay stateless (transitions are shared `ScriptableObject` assets across views).
+
+### Changed
+- 20 new regression tests (`Tests/Runtime/`), one per finding above plus supporting cases —
+  `UIViewFactoryConcurrencyTests`, `UINavigatorStateRoutingTests`, `TransitionCancelRestoreTests`,
+  `ViewCancellationTests`, `UIStateMachineTests`. Each fix was individually reverted and its test
+  confirmed to fail before the fix was restored — no vacuous tests in this set.
+
 ## [1.1.0] - 2026-08-01
 
 ### Added
