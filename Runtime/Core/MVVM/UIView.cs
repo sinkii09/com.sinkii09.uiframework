@@ -1,4 +1,5 @@
 using Cysharp.Threading.Tasks;
+using System;
 using System.Threading;
 using R3;
 using VContainer;
@@ -16,7 +17,8 @@ namespace Sinkii09.UIFramework
 
         protected TViewModel ViewModel => _viewModel;
 
-        // Not an IUIView override — UIViewFactory (Phase 04) casts to UIView<TViewModel> to call this.
+        // Not an IUIView override — InitializeNonGenericAsync's guarded cast below calls this once
+        // it has confirmed the incoming IViewModel is actually a TViewModel.
         // _initialized guard prevents double-init; reset in Cleanup() on pool return.
         public UniTask InitializeAsync(TViewModel vm, IObjectResolver scope, CancellationToken ct = default)
         {
@@ -35,7 +37,17 @@ namespace Sinkii09.UIFramework
         public override async UniTask ShowAsync(CancellationToken externalCt = default)
         {
             _viewModel?.OnShow();
-            await base.ShowAsync(externalCt);
+            try
+            {
+                await base.ShowAsync(externalCt);
+            }
+            catch (OperationCanceledException)
+            {
+                // OnShow() already ran; without this the per-show bindings from OnShow leak until
+                // the next FactoryReset. NotifyHide is guarded and idempotent (ViewModelBase).
+                _viewModel?.NotifyHide();
+                throw;
+            }
         }
 
         public override async UniTask HideAsync(CancellationToken externalCt = default)
@@ -54,7 +66,12 @@ namespace Sinkii09.UIFramework
         }
 
         internal override UniTask InitializeNonGenericAsync(IViewModel viewModel, IObjectResolver scope, CancellationToken ct)
-            => InitializeAsync((TViewModel)viewModel, scope, ct);
+        {
+            if (viewModel is not TViewModel typed)
+                throw new InvalidCastException(
+                    $"[UIView] {GetType().Name} expects {typeof(TViewModel).Name}, got {viewModel?.GetType().Name ?? "null"}.");
+            return InitializeAsync(typed, scope, ct);
+        }
 
         // Called by FactoryReset() when UIViewFactory is about to reuse this cached instance.
         // _viewScope.Dispose() triggers VContainer's IDisposable tracking, which disposes the ViewModel.

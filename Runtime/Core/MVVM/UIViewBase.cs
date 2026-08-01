@@ -55,6 +55,10 @@ namespace Sinkii09.UIFramework
             {
                 IsVisible = false;
                 gameObject.SetActive(false);
+                // Rethrow: NavigationStack.PushAsync must NOT add a view that was never shown, and
+                // every upstream caller composes on this token. HideAsync deliberately does not
+                // rethrow — see its comment below.
+                throw;
             }
             catch
             {
@@ -80,6 +84,13 @@ namespace Sinkii09.UIFramework
             }
             catch (OperationCanceledException)
             {
+                // Deliberately NOT rethrown — asymmetric with ShowAsync on purpose.
+                // NavigationStack.PopAsync hides first, then removes; the view IS hidden at this
+                // point (IsVisible/SetActive already applied above), so removing it from the stack
+                // is correct. Rethrowing here would abort the pop and strand an invisible view on
+                // the stack — strictly worse. ClearAsync's per-view catch-and-continue relies on
+                // hide failures not aborting its loop for the same reason. Do not "fix" this to
+                // match ShowAsync's rethrow — the two are not symmetric by design.
                 IsVisible = false;
                 gameObject.SetActive(false);
             }
