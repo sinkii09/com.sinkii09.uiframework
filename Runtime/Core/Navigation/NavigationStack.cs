@@ -34,7 +34,10 @@ namespace Sinkii09.UIFramework
             catch
             {
                 // ShowAsync threw (including OperationCanceledException) — view was never shown;
-                // do not add to stack. Re-throw so UINavigator knows the push failed.
+                // do not add to stack. Re-throw so UINavigator knows the push failed. Contract now
+                // enforced by UIViewBase.ShowAsync, which rethrows OperationCanceledException
+                // instead of swallowing it — previously this catch documented a contract the view
+                // layer silently violated.
                 throw;
             }
         }

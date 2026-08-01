@@ -57,10 +57,11 @@ namespace Sinkii09.UIFramework
             }
             catch (OperationCanceledException)
             {
-                // External cancellation: previous either didn't exit (exitCompleted=false → still valid current)
-                // or exited cleanly and enter was aborted. Roll back to previous so the caller
-                // can retry the same transition without a double-exit on the next attempt.
-                _currentState = previous;
+                // Same rule as the general-exception branch below: if OnExitAsync already ran,
+                // `previous` is exited and must NOT be restored as current — the next transition
+                // would call OnExitAsync on it a second time. Only a cancellation that landed
+                // before/during OnExitAsync leaves `previous` genuinely still current.
+                _currentState = exitCompleted ? null : previous;
                 throw;
             }
             catch
