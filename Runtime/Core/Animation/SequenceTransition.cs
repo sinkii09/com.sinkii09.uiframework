@@ -26,5 +26,13 @@ namespace Sinkii09.UIFramework
                     if (Transitions[i] != null && Transitions[i] != this) seq.Append(Transitions[i].CreateHideTween(view));
             return seq;
         }
+
+        // Forward so nested transitions aren't silently left with their own dead restore-on-cancel.
+        public override void RestoreOnCancel(UIViewBase view)
+        {
+            if (Transitions == null) return;
+            foreach (var t in Transitions)
+                if (t != null && t != this) t.RestoreOnCancel(view);
+        }
     }
 }

@@ -44,6 +44,9 @@ namespace Sinkii09.UIFramework
             }
             catch (OperationCanceledException)
             {
+                // Geometry restore lives here, not in the tween's OnKill — AwaitAsync replaces
+                // that callback, and OnKill also fires on normal completion.
+                transition.RestoreOnCancel(viewBase);
                 // Reset to hidden state — mid-tween alpha/scale is invalid.
                 cg.alpha = 0f;
                 cg.interactable = false;
@@ -84,6 +87,7 @@ namespace Sinkii09.UIFramework
             }
             catch (OperationCanceledException)
             {
+                transition.RestoreOnCancel(viewBase);
                 // Reset to fully visible state — UIViewBase.HideAsync catch handles SetActive(false).
                 cg.alpha = 1f;
                 cg.interactable = true;

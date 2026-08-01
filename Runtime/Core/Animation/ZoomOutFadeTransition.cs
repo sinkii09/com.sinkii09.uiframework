@@ -19,12 +19,6 @@ namespace Sinkii09.UIFramework
             var seq = DOTween.Sequence();
             seq.Join(t.DOScale(new Vector3(ZoomOutScale, ZoomOutScale, 1f), Duration).SetEase(EaseType));
             seq.Join(cg.DOFade(0f, Duration).SetEase(EaseType));
-            // OnKill: restore to visible/resting state so a cancelled hide leaves no mid-tween scale or alpha.
-            seq.OnKill(() =>
-            {
-                if (t != null) t.localScale = Vector3.one;
-                if (cg != null) cg.alpha = 1f;
-            });
             return seq;
         }
 
@@ -36,13 +30,14 @@ namespace Sinkii09.UIFramework
             var seq = DOTween.Sequence();
             seq.Join(t.DOScale(Vector3.one, Duration).From(zoomedOut).SetEase(EaseType));
             seq.Join(cg.DOFade(1f, Duration).From(0f).SetEase(EaseType));
-            // OnKill: restore to pre-show hidden state so a cancelled show leaves no mid-tween scale or alpha.
-            seq.OnKill(() =>
-            {
-                if (t != null) t.localScale = zoomedOut;
-                if (cg != null) cg.alpha = 0f;
-            });
             return seq;
+        }
+
+        // Resting scale is Vector3.one for both directions — the GO is deactivated and alpha is
+        // owned by the animator's own restore, so scale only needs to land back at its normal value.
+        public override void RestoreOnCancel(UIViewBase view)
+        {
+            if (view != null) view.transform.localScale = Vector3.one;
         }
     }
 }

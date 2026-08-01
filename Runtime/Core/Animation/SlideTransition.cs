@@ -20,14 +20,10 @@ namespace Sinkii09.UIFramework
                 return DOTween.To(() => 0f, _ => { }, 1f, Duration);
             }
 
-            var originalPos = rt.anchoredPosition;
             var offset = GetOffset();
             rt.anchoredPosition = offset;
 
-            // OnKill: restore original position if tween is killed mid-animation (e.g. cancellation).
-            return rt.DOAnchorPos(Vector2.zero, Duration)
-                .SetEase(EaseType)
-                .OnKill(() => { if (rt != null) rt.anchoredPosition = originalPos; });
+            return rt.DOAnchorPos(Vector2.zero, Duration).SetEase(EaseType);
         }
 
         public override Tween CreateHideTween(UIViewBase view)
@@ -39,11 +35,15 @@ namespace Sinkii09.UIFramework
                 return DOTween.To(() => 0f, _ => { }, 1f, Duration);
             }
 
-            var restingPos = rt.anchoredPosition;
-            // OnKill: restore resting position if cancelled mid-slide-out.
-            return rt.DOAnchorPos(GetOffset(), Duration)
-                .SetEase(EaseType)
-                .OnKill(() => { if (rt != null) rt.anchoredPosition = restingPos; });
+            return rt.DOAnchorPos(GetOffset(), Duration).SetEase(EaseType);
+        }
+
+        // Resting pose is Vector2.zero — CreateShowTween always tweens to zero (never back to a
+        // per-instance originalPos), so zero already is this transition's canonical resting pose.
+        public override void RestoreOnCancel(UIViewBase view)
+        {
+            var rt = view != null ? view.RectTransform : null;
+            if (rt != null) rt.anchoredPosition = Vector2.zero;
         }
 
         private Vector2 GetOffset() => Direction switch
