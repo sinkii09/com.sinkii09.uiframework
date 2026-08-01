@@ -5,6 +5,7 @@
         "Sinkii09.UIFramework",
         "UniTask",
         "R3.Unity",
+        "VContainer",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
