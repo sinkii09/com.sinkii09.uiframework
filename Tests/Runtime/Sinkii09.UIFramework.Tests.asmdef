@@ -1,0 +1,47 @@
+{
+    "name": "Sinkii09.UIFramework.Tests",
+    "rootNamespace": "Sinkii09.UIFramework.Tests",
+    "references": [
+        "Sinkii09.UIFramework",
+        "UniTask",
+        "R3.Unity",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll",
+        "R3.dll",
+        "Microsoft.Bcl.TimeProvider.dll",
+        "Microsoft.Bcl.AsyncInterfaces.dll",
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "SINKII09_UNITASK",
+        "SINKII09_R3",
+        "SINKII09_VCONTAINER"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.cysharp.unitask",
+            "expression": "",
+            "define": "SINKII09_UNITASK"
+        },
+        {
+            "name": "com.cysharp.r3",
+            "expression": "",
+            "define": "SINKII09_R3"
+        },
+        {
+            "name": "jp.hadashikick.vcontainer",
+            "expression": "",
+            "define": "SINKII09_VCONTAINER"
+        }
+    ],
+    "noEngineReferences": false
+}
