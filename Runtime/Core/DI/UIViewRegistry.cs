@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using UnityEngine;
 
 namespace Sinkii09.UIFramework
@@ -61,8 +63,22 @@ namespace Sinkii09.UIFramework
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
                 Type[] types;
-                try { types = assembly.GetTypes(); }
-                catch { continue; } // skip assemblies that fail reflection (obfuscated, native-only, etc.)
+                try
+                {
+                    types = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    // Recover the types that loaded fine instead of discarding the whole assembly —
+                    // one stripped/broken type shouldn't cost every other view in the same assembly
+                    // its auto-registration.
+                    types = ex.Types.Where(t => t != null).ToArray();
+                    Debug.LogWarning($"[UIViewRegistry] {assembly.GetName().Name}: " +
+                        $"{ex.LoaderExceptions?.Length ?? 0} type(s) failed to load during the " +
+                        "auto-registration scan (IL2CPP stripping or a missing dependency?). " +
+                        $"Recovered {types.Length} loadable type(s); views defined in the failed " +
+                        "types will not auto-register.");
+                }
 
                 foreach (var type in types)
                 {
