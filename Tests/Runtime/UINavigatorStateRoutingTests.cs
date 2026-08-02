@@ -94,7 +94,7 @@ namespace Sinkii09.UIFramework.Tests
             var stateMachine = new UIStateMachine();
             var navigator = new UINavigator(stack, stateMachine, null, Array.Empty<UIViewRegistration>(), null);
             var glm = new GameLifecycleManager(stateMachine, navigator, new NullTransitionOverlay(),
-                new BootState(), new LoadingState(null, null));
+                new LoadingContext(), new BootState(), new LoadingState(null, null));
 
             int? countDuringEnter = null;
             var gameState = new FakeGameState { OnEnterCallback = () => countDuringEnter = stack.Count };

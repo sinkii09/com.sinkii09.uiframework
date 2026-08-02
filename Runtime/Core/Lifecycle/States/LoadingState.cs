@@ -6,15 +6,16 @@ using VContainer;
 
 namespace Sinkii09.UIFramework
 {
-    // Before calling ChangeStateAsync<LoadingState>, configure the context:
-    //   _loadingContext.Set("SceneName", ct => _lifecycle.ChangeStateAsync<GameplayState>(ct));
-    // LoadingContext is reset immediately after the scene loads to prevent stale re-use.
+    // Loads a scene and stops — does not transition to another state on its own. Use
+    // GameLifecycleManager.LoadSceneAndChangeStateAsync<TNext>(scene, ct) to load a scene and
+    // then transition into TNext as one composed operation; do NOT call back into
+    // GameLifecycleManager.ChangeStateAsync from any callback wired through this state — it
+    // would nest inside the outer transition's _isTransitioning window and either no-op
+    // (guard rejects it) or, if the guard were naively loosened, double-exit the previous state
+    // (UIStateMachine only promotes _currentState after OnEnterAsync returns, so a nested call
+    // would still see the pre-Loading state as "current" and re-run its OnExitAsync).
     // If Set() is never called, OnEnterAsync throws InvalidOperationException (fast-fail).
-    //
-    // NOTE on OnEnterAsync/OnExitAsync ordering: OnEnterAsync triggers the next-state
-    // transition via onLoaded, which causes UIStateMachine to call OnExitAsync (hide loading
-    // screen) before entering the next state. This is correct, but OnExitAsync fires while
-    // still on the OnEnterAsync call stack. Future LoadingView show/hide must account for this.
+    // Overlay show/hide is owned by GameLifecycleManager around the whole call, not by this state.
     public class LoadingState : IGameState
     {
         private readonly ISceneLoader _sceneLoader;
@@ -36,22 +37,15 @@ namespace Sinkii09.UIFramework
                 throw new InvalidOperationException(
                     "[LoadingState] TargetScene not set. Call ILoadingContext.Set() before ChangeStateAsync<LoadingState>().");
 
-            // Overlay show/hide is owned by GameLifecycleManager around the whole
-            // ChangeStateAsync<LoadingState> call (including this scene load) — not by this state.
             await _sceneLoader.LoadAsync(_loadingContext.TargetScene, LoadSceneMode.Single, ct);
 
-            // Consume context before invoking callback to prevent stale re-entry if
-            // onLoaded itself calls ChangeStateAsync<LoadingState> again.
-            var onLoaded = _loadingContext.OnLoaded;
+            // Consumed after loading to prevent stale re-use on the next LoadingState entry.
             _loadingContext.Reset();
-
-            if (onLoaded != null)
-                await onLoaded(ct);
         }
 
         public UniTask OnExitAsync(CancellationToken ct = default)
         {
-            // See OnEnterAsync — overlay is GameLifecycleManager's responsibility, not this state's.
+            // Overlay is GameLifecycleManager's responsibility, not this state's.
             return UniTask.CompletedTask;
         }
     }

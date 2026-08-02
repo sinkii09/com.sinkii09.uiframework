@@ -15,6 +15,7 @@ namespace Sinkii09.UIFramework
         private readonly IUIStateMachine _stateMachine;
         private readonly UINavigator _navigator; // concrete: ChangeStateAsync is internal
         private readonly ITransitionOverlay _overlay;
+        private readonly ILoadingContext _loadingContext;
         private readonly CancellationToken _exitToken;
         private bool _isTransitioning;
 
@@ -23,12 +24,14 @@ namespace Sinkii09.UIFramework
             IUIStateMachine stateMachine,
             UINavigator navigator,
             ITransitionOverlay overlay,
+            ILoadingContext loadingContext,
             BootState bootState,
             LoadingState loadingState)
         {
             _stateMachine = stateMachine;
             _navigator = navigator;
             _overlay = overlay;
+            _loadingContext = loadingContext;
             _exitToken = Application.exitCancellationToken;
             stateMachine.RegisterState(bootState);
             stateMachine.RegisterState(loadingState);
@@ -95,6 +98,39 @@ namespace Sinkii09.UIFramework
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _exitToken);
                 await ShowOverlaySafeAsync(cts.Token);
                 await _navigator.ChangeStateAsync<T>(cts.Token);
+            }
+            finally
+            {
+                await HideOverlaySafeAsync();
+                _isTransitioning = false;
+            }
+        }
+
+        // Loads a scene via LoadingState, then transitions directly into TNext — both steps under
+        // one overlay/guard window. Do NOT chain ChangeStateAsync<LoadingState> +
+        // ChangeStateAsync<TNext> yourself from inside a callback triggered by LoadingState: that
+        // would nest a second ChangeStateAsync call inside this one's still-true _isTransitioning,
+        // which either no-ops (guard rejects it) or — if the guard were loosened — double-exits the
+        // previous state, since UIStateMachine only promotes _currentState after OnEnterAsync
+        // returns. The two _navigator.ChangeStateAsync calls below are sequential siblings, not
+        // nested, so by the time the second one runs, _currentState is already correctly promoted
+        // to LoadingState.
+        public async UniTask LoadSceneAndChangeStateAsync<TNext>(string sceneName, CancellationToken ct = default)
+            where TNext : IGameState
+        {
+            if (_isTransitioning)
+            {
+                Debug.LogWarning($"[GameLifecycleManager] Transitioning — LoadSceneAndChangeStateAsync<{typeof(TNext).Name}> ignored.");
+                return;
+            }
+            _isTransitioning = true;
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _exitToken);
+                await ShowOverlaySafeAsync(cts.Token);
+                _loadingContext.Set(sceneName);
+                await _navigator.ChangeStateAsync<LoadingState>(cts.Token);
+                await _navigator.ChangeStateAsync<TNext>(cts.Token);
             }
             finally
             {
