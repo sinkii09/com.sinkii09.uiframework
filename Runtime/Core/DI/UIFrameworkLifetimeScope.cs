@@ -62,11 +62,16 @@ namespace Sinkii09.UIFramework
             builder.Register<IUIStateMachine, UIStateMachine>(Lifetime.Singleton);
 
 
-            // SafeAreaProvider must be a MonoBehaviour on the UIRoot prefab hierarchy.
-            if (GetComponentInChildren<SafeAreaProvider>() == null)
-                Debug.LogError("[UIFrameworkLifetimeScope] SafeAreaProvider not found in hierarchy — add it to the UIRoot prefab.", this);
-            else
+            // SafeAreaProvider should be a MonoBehaviour on the UIRoot prefab hierarchy; absent ->
+            // NullSafeAreaProvider so DI resolution never throws. Still warned (not silent) because,
+            // unlike ITransitionOverlay, safe-area support isn't meant to be opt-in per-game.
+            if (GetComponentInChildren<SafeAreaProvider>() != null)
                 builder.RegisterComponentInHierarchy<SafeAreaProvider>().AsImplementedInterfaces();
+            else
+            {
+                Debug.LogWarning("[UIFrameworkLifetimeScope] SafeAreaProvider not found in hierarchy — add it to the UIRoot prefab. Falling back to a full-screen NullSafeAreaProvider.", this);
+                builder.RegisterInstance<ISafeAreaProvider>(new NullSafeAreaProvider());
+            }
 
             builder.Register<IBackButtonSource, NewInputSystemBackButtonSource>(Lifetime.Singleton);
             builder.RegisterEntryPoint<BackButtonRouter>();

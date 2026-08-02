@@ -14,11 +14,10 @@ namespace Sinkii09.UIFramework
 
         private void Start()
         {
-            if (_safeArea == null)
-            {
-                Debug.LogError("[UIRootSetup] ISafeAreaProvider not injected — ensure UIFrameworkLifetimeScope is in the scene.", this);
-                return;
-            }
+            // No null-check on _safeArea: ISafeAreaProvider is now always registered (real or
+            // NullSafeAreaProvider) by UIFrameworkLifetimeScope, and VContainer field injection
+            // throws before Start() runs if it weren't — a post-injection null here was already
+            // unreachable dead code.
             if (_safeAreaPanel == null)
             {
                 Debug.LogError("[UIRootSetup] _safeAreaPanel not assigned in Inspector.", this);
