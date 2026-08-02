@@ -15,5 +15,22 @@
     "overrideReferences": false,
     "autoReferenced": false,
     "defineConstraints": ["SINKII09_UNITASK", "SINKII09_R3", "SINKII09_VCONTAINER"],
+    "versionDefines": [
+        {
+            "name": "com.cysharp.unitask",
+            "expression": "",
+            "define": "SINKII09_UNITASK"
+        },
+        {
+            "name": "com.cysharp.r3",
+            "expression": "",
+            "define": "SINKII09_R3"
+        },
+        {
+            "name": "jp.hadashikick.vcontainer",
+            "expression": "",
+            "define": "SINKII09_VCONTAINER"
+        }
+    ],
     "noEngineReferences": false
 }
