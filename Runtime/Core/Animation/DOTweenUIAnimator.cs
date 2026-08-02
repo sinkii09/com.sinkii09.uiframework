@@ -27,9 +27,13 @@ namespace Sinkii09.UIFramework
 
             if (transition == null)
             {
+                // Locked out here, restored by UIViewBase after OnShowAsync completes — matches the
+                // non-null-transition path below. Without this, a freshly-added CanvasGroup defaults
+                // to interactable=true (Unity's own default), so a view would be clickable for the
+                // view's ENTIRE OnShowAsync, not just briefly — this is the widest form of Finding 2.
                 cg.alpha = 1f;
-                cg.interactable = true;
-                cg.blocksRaycasts = true;
+                cg.interactable = false;
+                cg.blocksRaycasts = false;
                 return;
             }
 
@@ -39,8 +43,10 @@ namespace Sinkii09.UIFramework
             {
                 var showTween = transition.CreateShowTween(viewBase).SetLink(viewBase.gameObject);
                 await showTween.AwaitAsync(ct);
-                cg.interactable = true;
-                cg.blocksRaycasts = true;
+                // Resting alpha, regardless of whether this transition animates alpha itself
+                // (Fade/ZoomOutFade already end here; Scale/Slide never touch alpha at all).
+                cg.alpha = 1f;
+                // interactable/blocksRaycasts restored by UIViewBase after OnShowAsync completes.
             }
             catch (OperationCanceledException)
             {
@@ -84,6 +90,8 @@ namespace Sinkii09.UIFramework
             {
                 var hideTween = transition.CreateHideTween(viewBase).SetLink(viewBase.gameObject);
                 await hideTween.AwaitAsync(ct);
+                // Resting alpha, regardless of whether this transition animates alpha itself.
+                cg.alpha = 0f;
             }
             catch (OperationCanceledException)
             {

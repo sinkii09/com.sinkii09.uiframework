@@ -49,6 +49,13 @@ namespace Sinkii09.UIFramework
                 if (_animator != null)
                     await _animator.ShowAsync(this, _showTransition, cts.Token);
                 await OnShowAsync(cts.Token);
+                // Owned here, not by the animator: a view must not become clickable until its own
+                // setup work (data population, binding wiring) has actually finished.
+                if (CanvasGroup != null)
+                {
+                    CanvasGroup.interactable = true;
+                    CanvasGroup.blocksRaycasts = true;
+                }
                 IsVisible = true;
             }
             catch (OperationCanceledException)

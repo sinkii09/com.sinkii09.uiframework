@@ -97,17 +97,21 @@ namespace Sinkii09.UIFramework.Tests
             transition.Duration = 0.05f;
             var animator = new DOTweenUIAnimator();
 
-            // C3-4: guards the other half of the fix. RestoreOnCancel — and the
-            // interactable/blocksRaycasts=false reset — only happen inside the
-            // catch(OperationCanceledException) branch; asserting the SUCCESS branch's
-            // postconditions here proves that branch (and therefore RestoreOnCancel) never ran.
+            // C3-4: guards the other half of the fix. RestoreOnCancel only runs inside the
+            // catch(OperationCanceledException) branch; asserting the scale lands on its resting
+            // pose via the tween itself (not via RestoreOnCancel) proves that branch never ran.
             // The old Tween.OnKill(...) restore fired on every completion, including success — this
             // is the regression test for that half.
+            // interactable/blocksRaycasts are asserted false, not true: DOTweenUIAnimator no longer
+            // restores them on success (animation-hardening cluster, 2026-08-02) — that is now
+            // UIViewBase's job, run after OnShowAsync, which this test deliberately bypasses by
+            // calling the animator directly. See DOTweenUIAnimatorInteractableTimingTests for the
+            // UIViewBase-level regression coverage of that ownership split.
             await animator.ShowAsync(view, transition, CancellationToken.None);
 
             Assert.AreEqual(Vector3.one, view.transform.localScale);
-            Assert.IsTrue(view.CanvasGroup.interactable);
-            Assert.IsTrue(view.CanvasGroup.blocksRaycasts);
+            Assert.IsFalse(view.CanvasGroup.interactable);
+            Assert.IsFalse(view.CanvasGroup.blocksRaycasts);
         });
     }
 }
