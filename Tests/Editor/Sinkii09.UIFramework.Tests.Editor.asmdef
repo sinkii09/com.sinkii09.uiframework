@@ -1,0 +1,25 @@
+{
+    "name": "Sinkii09.UIFramework.Tests.Editor",
+    "rootNamespace": "Sinkii09.UIFramework.Tests.Editor",
+    "references": [
+        "Sinkii09.UIFramework",
+        "Sinkii09.UIFramework.Editor.Tools",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

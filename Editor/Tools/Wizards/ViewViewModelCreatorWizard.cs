@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
@@ -31,6 +32,18 @@ namespace Sinkii09.UIFramework.Editor
 
         private static void Generate(string viewName, string vmName, string ns, string folder)
         {
+            // Check both target paths before writing either — avoids a partial-overwrite where
+            // the View gets regenerated, the user then cancels on the ViewModel, and the pair
+            // ends up inconsistent (one new, one stale).
+            var existing = GetExistingTargets(folder, viewName, vmName);
+            if (existing.Length > 0)
+            {
+                var message = "The following file(s) already exist and will be overwritten:\n\n"
+                    + string.Join("\n", existing);
+                if (!EditorUtility.DisplayDialog("Overwrite existing file(s)?", message, "Overwrite", "Cancel"))
+                    return;
+            }
+
             Directory.CreateDirectory(folder);
 
             var view = LoadTemplate("UIViewTemplate");
@@ -48,6 +61,20 @@ namespace Sinkii09.UIFramework.Editor
 
             AssetDatabase.Refresh();
             Debug.Log($"[UIFramework] Created {viewName} + {vmName} in {folder}");
+        }
+
+        // Pure, no I/O writes — only existence checks. Kept side-effect-free and public so it's
+        // directly testable without driving EditorUtility.DisplayDialog (no Unity-provided mock
+        // for a native modal).
+        public static string[] GetExistingTargets(string folder, string viewName, string vmName)
+        {
+            var viewPath = Path.Combine(folder, $"{viewName}.cs");
+            var vmPath   = Path.Combine(folder, $"{vmName}.cs");
+
+            var targets = new List<string>(2);
+            if (File.Exists(viewPath)) targets.Add(viewPath);
+            if (File.Exists(vmPath)) targets.Add(vmPath);
+            return targets.ToArray();
         }
 
         private static void Write(string folder, string className, string code) =>
