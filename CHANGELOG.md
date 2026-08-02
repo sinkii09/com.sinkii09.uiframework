@@ -2,6 +2,42 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-02
+
+Phase 2 of the 2026-08-01 consolidated audit — the "crash / data-loss prevention" cluster (C4, C5,
+and a `UIViewRegistry` reflection-swallow finding), deferred from the v1.2.0 correctness cluster.
+All three are backwards-compatible; no public API removed. Full findings:
+`plans/reports/code-review-260801-2110-uiframework-consolidated.md` in the consuming project;
+implementation plan: `plans/260802-1122-hardening-cluster/plan.md` in this repo.
+
+### Fixed
+- **`ViewViewModelCreatorWizard` no longer silently overwrites existing files.** Re-running the
+  View/ViewModel generator with a name colliding with an existing (possibly hand-edited) file now
+  shows a confirmation dialog naming exactly which file(s) would be overwritten; Cancel aborts
+  writing either file, so the pair never ends up half-regenerated.
+- **`ISafeAreaProvider` has a Null-Object fallback.** A scene missing a `SafeAreaProvider`
+  component used to crash VContainer resolution instead of degrading gracefully. It now falls back
+  to a full-screen `NullSafeAreaProvider` (mirrors the existing `ITransitionOverlay`/
+  `NullTransitionOverlay` pattern), with a `Debug.LogWarning` instead of a hard error.
+- **`UIViewRegistry.AutoRegister` no longer silently drops an entire assembly's views on a partial
+  reflection failure.** A bare `catch { continue; }` around `Assembly.GetTypes()` treated any
+  `ReflectionTypeLoadException` (common under IL2CPP stripping) as "skip this whole assembly,"
+  discarding types that loaded fine along with the ones that didn't, with zero diagnostic. Now
+  catches `ReflectionTypeLoadException` specifically, recovers the loadable types via
+  `ex.Types.Where(t => t != null)`, and logs a warning naming the assembly and failure count.
+- **`Editor.Tools` assembly now actually compiles.** Unrelated latent bug found while implementing
+  the above: `com.sinkii09.uiframework.editor.tools.asmdef` had `defineConstraints` for
+  `SINKII09_UNITASK`/`SINKII09_R3`/`SINKII09_VCONTAINER` but no matching `versionDefines` block to
+  define them — permanently unsatisfiable constraints, so Unity silently excluded the whole
+  assembly (both setup wizards, the View/ViewModel generator, the custom inspector, all menu
+  items) from compilation in every consuming project, with no error anywhere. Fixed by adding the
+  same `versionDefines` block already used by the runtime and test assemblies.
+
+### Added
+- `Tests/Editor/` — new Editor-only test assembly (`Sinkii09.UIFramework.Tests.Editor`) for
+  `ViewViewModelCreatorWizard` coverage, since it depends on the Editor-only `Editor.Tools`
+  assembly and the main `Tests/Runtime` assembly isn't platform-restricted.
+
 ## [1.2.0] - 2026-08-01
 
 A 4-way parallel adversarial review of the whole framework (101 files) re-verified every CRITICAL
