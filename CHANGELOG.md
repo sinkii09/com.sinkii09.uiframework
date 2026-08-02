@@ -2,6 +2,47 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-02
+
+Animation/transition subsystem audit — 1 CRITICAL + 2 WARNING findings, each closed with dedicated
+regression tests, verified by reverting each fix in isolation and confirming its test goes red
+before restoring it (one revert surfaced a genuine additional gap in the initial fix — see the
+`interactable`/`blocksRaycasts` note below — caught before this release, not after). Plan:
+`plans/260802-1358-animation-transition-hardening/plan.md` in this repo.
+
+### BREAKING
+- **`ILoadingContext.OnLoaded` removed; `Set()` no longer takes an `onLoaded` callback.** The old
+  pattern — `_loadingContext.Set(scene, ct => _lifecycle.ChangeStateAsync<GameplayState>(ct))`,
+  invoked by `LoadingState.OnEnterAsync` after the scene loaded — deadlocked: the callback ran
+  nested inside `GameLifecycleManager.ChangeStateAsync<LoadingState>`'s still-`true`
+  `_isTransitioning`, so the nested call silently no-op'd against GLM's own reentrancy guard. The
+  state machine ended up permanently stuck on `LoadingState`, even though the outer call reported
+  success. No known consumer had wired this pattern up yet. **Migration:** replace
+  `_loadingContext.Set(scene, ct => _lifecycle.ChangeStateAsync<TNext>(ct))` +
+  `_lifecycle.ChangeStateAsync<LoadingState>(ct)` with a single
+  `_lifecycle.LoadSceneAndChangeStateAsync<TNext>(scene, ct)` call.
+
+### Added
+- `GameLifecycleManager.LoadSceneAndChangeStateAsync<TNext>(sceneName, ct)` — loads a scene via
+  `LoadingState` then transitions directly into `TNext`, both steps composed as sequential sibling
+  calls (not nested) under one overlay/guard window, avoiding the deadlock above by construction.
+
+### Fixed
+- **A view could be clicked before its own `OnShowAsync` setup finished.** `DOTweenUIAnimator` used
+  to restore `CanvasGroup.interactable`/`blocksRaycasts = true` itself — immediately on tween
+  completion, or synchronously (before `OnShowAsync` even started) when no `_showTransition` was
+  assigned. `UIViewBase.ShowAsync` is now the sole owner of restoring them to `true`, and only after
+  `OnShowAsync` completes. (The null-transition branch needed an explicit `interactable = false`
+  added too — without it, a freshly-added `CanvasGroup` defaults to `interactable = true` via
+  Unity's own component default, so the view would have stayed clickable for the view's entire
+  `OnShowAsync`, not just briefly; caught by the regression test itself during implementation.)
+- **`CanvasGroup.alpha` could get stuck at 0 when mixing transition types.** `FadeTransition`/
+  `ZoomOutFadeTransition` drive alpha themselves and happened to land correctly, but
+  `ScaleTransition`/`SlideTransition` never touched alpha at all — assigning e.g. a Fade hide with a
+  Scale show on the same view left alpha stuck at 0 after the first hide, forever (the view scales
+  back into place on the next show but stays invisible). `DOTweenUIAnimator` now unconditionally
+  normalizes `alpha` to 1 (show) / 0 (hide) after any successful transition, regardless of type.
+
 ## [1.2.1] - 2026-08-02
 
 Phase 2 of the 2026-08-01 consolidated audit — the "crash / data-loss prevention" cluster (C4, C5,
