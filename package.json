@@ -1,6 +1,6 @@
 {
     "name": "com.sinkii09.uiframework",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "displayName": "Sinkii09 UI Framework",
     "description": "Unity 6 reactive UI framework: R3 MVVM, VContainer DI, DOTween animations, game lifecycle.",
     "unity": "6000.0",

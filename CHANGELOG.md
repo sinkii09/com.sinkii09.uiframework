@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-08-18
+
+### Fixed
+- **Removed three orphaned `.meta` files whose folders no longer exist**, which made every consuming
+  project log a warning on import: `Runtime/Core/Pooling.meta` (left behind when the pool system was
+  removed), `Runtime/Resources.meta` and `Runtime/Resources/UIFramework.meta` (empty folders the
+  package never shipped anything into). Git cannot store an empty directory, so on a fresh clone
+  Unity found each `.meta` without its folder, recreated the folder, and warned — once per consumer,
+  every import. Nothing in `Runtime/` or `Editor/` referenced either path.
+
+  No API or behaviour change; `Resources.Load` searches every `Resources` folder in the project, so
+  an empty one in the package contributed nothing.
+
 ## [1.4.0] - 2026-08-18
 
 RecyclerView Phase 1. The suite written alongside it had never been executed; running it surfaced 18
