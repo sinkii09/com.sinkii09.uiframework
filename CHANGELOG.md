@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-18
+
+RecyclerView Phase 1. The suite written alongside it had never been executed; running it surfaced 18
+failures (all test-side) and a review found one CRITICAL in the runtime, fixed below. Verified at
+EditMode 62/62 and PlayMode 90/90, with 19 new integration tests covering the ~530 LOC that
+previously had none. Plan: `plans/260818-2139-recycler-view-phase1-completion/` in the consuming
+project.
+
 ### Added
 - **`RecyclerView`** (`Runtime/Controls/Collections/`) — a recycling list whose live cell count
   tracks the viewport rather than the data: 10,000 items realise ~11 cells. Written to replace
