@@ -2,6 +2,45 @@
 
 ## [Unreleased]
 
+### Added
+- **`RecyclerView`** (`Runtime/Controls/Collections/`) — a recycling list whose live cell count
+  tracks the viewport rather than the data: 10,000 items realise ~11 cells. Written to replace
+  SuperScrollView rather than wrap it. Phase 1 assumes a uniform, declared cell size; variable
+  sizing is phase 2. Ships with a two-tier pool (a cell recycled off the head is reusable at the
+  tail in the same frame with no `SetActive` round-trip and no `Instantiate`), reseed-on-jump, and
+  four scroll directions collapsed into one code path.
+  - `RecycleWindow` is a pure static decision function — no Unity types, no state — so termination
+    is proved by EditMode tests rather than bounded by a bail-out counter.
+  - Provider contract is enforced, not trusted: the cell must come from `RentCell`, exactly one per
+    call, and never `null`. Each violation silently corrupts the window otherwise.
+- Quick-create menu item `GameObject > UI > UIFramework > Recycler View`.
+- Sample `Samples~/RecyclerViewList` — a 50,000-row leaderboard consumer.
+
+### Fixed
+- **`RecycleWindow`'s iteration cap was a fixed 64 that ordinary configurations exceeded.** A reseed
+  grows the window one cell per iteration, so the work scales with how many cells fit in the
+  viewport plus a create band at each end — a 1920px-tall viewport with 30px rows needs ~77. Past
+  the cap the pump logged an error and abandoned the tick, leaving a permanently under-filled list
+  and a per-frame error flood. Replaced with `RecycleWindow.MaxIterationsFor`, derived from the
+  geometry at pump time.
+- `SetCellProvider` now pumps, so installing the provider after `SetItemCount` no longer leaves the
+  list blank until the next `Update()`.
+- `RentCell` now refuses the two contract violations that used to leak a cell silently: being called
+  outside the provider, and being called twice for one index (only the returned cell is tracked).
+- A provider that rented a cell and then returned `null` leaked that cell permanently; it is now
+  returned to the pool before the contract violation throws.
+- `RefreshIndex` on a provider that throws no longer strands a staged cell that the shown-window
+  still references — the slot is dropped and the next pump refills it.
+- `ScrollToIndex` and `ForEachShownCell` now carry the same reentrancy guard as the other public
+  mutators, so a call from inside a cell provider is refused loudly instead of corrupting the window.
+
+### Docs
+- `ScrollAxis.ViewportStart` was documented as the inverse of `ToLocal`. It is the **negative**:
+  `ToLocal` places cells inside the content root, `ViewportStart` reads the content root's own
+  position, and the content travels the opposite way to reveal later items. The wrong doc had
+  already produced 8 wrong tests.
+
+
 ## [1.3.0] - 2026-08-02
 
 Animation/transition subsystem audit — 1 CRITICAL + 2 WARNING findings, each closed with dedicated

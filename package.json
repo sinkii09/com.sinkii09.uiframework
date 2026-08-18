@@ -12,5 +12,12 @@
     "keywords": ["ui", "mvvm", "reactive", "vcontainer", "r3"],
     "author": {
         "name": "Sinkii09"
-    }
+    },
+    "samples": [
+        {
+            "displayName": "Recycler View List",
+            "description": "A 50,000-row leaderboard driven by RecyclerView: cell provider, cell prefab, and the rent-exactly-one contract.",
+            "path": "Samples~/RecyclerViewList"
+        }
+    ]
 }
