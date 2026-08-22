@@ -21,11 +21,12 @@ namespace Sinkii09.UIFramework
         public float Offset;
 
         /// <summary>
-        /// Size along the scroll axis last measured from the cell's rect. In Phase 1 this should
-        /// always equal the declared cell size; a mismatch means the cell self-sized and is
-        /// reported as an error rather than silently absorbed.
+        /// Size along the scroll axis this cell was <b>declared</b> to have — from the size provider,
+        /// or the uniform setting when there is none. Never a measurement: the view decides the size
+        /// and writes it to the cell, not the other way round. A cell whose real rect disagrees
+        /// self-sized, and is reported as an error rather than silently absorbed.
         /// </summary>
-        public float MeasuredSize;
+        public float DeclaredSize;
 
         /// <summary>
         /// Pump tick on which this cell was created. Cells created on the current tick are exempt
@@ -35,6 +36,6 @@ namespace Sinkii09.UIFramework
         public int CreatedTick;
 
         /// <summary>End of this cell in offset space, exclusive.</summary>
-        public float EndOffset => Offset + MeasuredSize;
+        public float EndOffset => Offset + DeclaredSize;
     }
 }

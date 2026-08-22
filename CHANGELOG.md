@@ -2,6 +2,39 @@
 
 ## [Unreleased]
 
+RecyclerView Phase 2 — variable cell size.
+
+### Added
+- **`RecyclerView.SetItemSizeProvider(Func<int, float>)`** — per-index cell sizes along the scroll
+  axis. Sizes are **declared, never measured**: the view asks before it binds, so the content extent
+  and every cell position are exact from the first frame and the list never shifts under the user to
+  correct an estimate. The trade is that a cell may not size itself; the editor-only measurement
+  check reports one that tries. Pass `null` to return to the uniform `RecyclerViewSettings.CellSize`.
+- **`RecyclerView.SetItemSize(int, float)`** — re-declares one item's size and re-lays out what
+  follows, for a row that expands on tap. O(n) in the item count, and deliberately discarded by the
+  next `SetItemCount` (a count change re-asks the provider).
+- Internal `IItemOffsets` with `UniformOffsets` and `PrefixSumOffsets` implementations. The window's
+  decision core needed no change — `RecycleWindow.Decide`/`NeedsReseed` already compared offsets
+  rather than stride — so this replaces the offset *supply*, not the recycling logic.
+
+### Fixed
+- **A pooled cell kept the size of whichever index first instantiated it.** `ContentLayout.ConfigureCell`
+  ran once per `Instantiate`, which was correct while every cell was the same size. Sizing is now
+  applied per bind, in both bind paths.
+- **`Rebind` never wrote a size at all**, so `RefreshIndex` on a multi-prefab list rendered the
+  refreshed cell at whatever size its replacement carried out of the pool. Invisible to any
+  single-prefab test.
+- **The content rect was only ever rebuilt by `SetItemCount`.** Under uniform sizing count was the
+  only thing that could move an offset; it no longer is, so both new mutators rebuild it along with
+  every live cell's cached offset.
+- `RecycleWindow.MaxIterationsFor` now takes the list's **smallest stride** rather than a single
+  uniform one. A list of 200px rows carrying one 4px separator converges at the rate of the 4px row,
+  and averaging would reproduce the fixed-cap defect this replaced: a bound that is usually generous
+  and occasionally, silently, short.
+- Reentrancy: a size provider that mutates the list is now refused. The provider runs outside the
+  pump, so the pump's own guard did not cover it.
+- `CellHandle.MeasuredSize` renamed `DeclaredSize` — it has never held a measurement.
+
 ## [1.4.1] - 2026-08-18
 
 ### Fixed

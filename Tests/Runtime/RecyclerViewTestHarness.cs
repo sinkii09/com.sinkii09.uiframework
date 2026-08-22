@@ -30,6 +30,9 @@ namespace Sinkii09.UIFramework.Tests
         public GameObject Root;
         public TestCell Prefab;
 
+        /// <summary>Every cell template this harness created, prefab id order.</summary>
+        public readonly List<TestCell> Prefabs = new();
+
         /// <summary>Data indices the provider was asked to bind, in order, across the whole test.</summary>
         public readonly List<int> BindCalls = new();
 
@@ -41,7 +44,8 @@ namespace Sinkii09.UIFramework.Tests
             float cellSize = 100f,
             float spacing = 0f,
             ScrollDirection direction = ScrollDirection.TopToBottom,
-            int prewarmCount = 0)
+            int prewarmCount = 0,
+            int prefabCount = 1)
         {
             var harness = new RecyclerViewHarness();
 
@@ -57,19 +61,48 @@ namespace Sinkii09.UIFramework.Tests
             scroll.movementType = ScrollRect.MovementType.Unrestricted;
             scroll.inertia = false;
 
-            // The "prefab" is just an inactive template Instantiate() can copy.
-            var prefabGo = new GameObject("CellPrefab", typeof(RectTransform));
-            prefabGo.SetActive(false);
-            harness.Prefab = prefabGo.AddComponent<TestCell>();
+            // The "prefab" is just an inactive template Instantiate() can copy. More than one gives
+            // the pool separate per-id tiers, which is the only way a recycled cell can arrive
+            // carrying another index's size.
+            var prefabs = new RecyclerCell[Mathf.Max(1, prefabCount)];
+            for (int id = 0; id < prefabs.Length; id++)
+            {
+                var prefabGo = new GameObject($"CellPrefab{id}", typeof(RectTransform));
+                prefabGo.SetActive(false);
+                var cell = prefabGo.AddComponent<TestCell>();
+                prefabs[id] = cell;
+                harness.Prefabs.Add(cell);
+            }
+            harness.Prefab = harness.Prefabs[0];
 
             harness.View = harness.Root.AddComponent<RecyclerView>();
             SetField(harness.View, "_direction", direction);
-            SetField(harness.View, "_cellPrefabs", new RecyclerCell[] { harness.Prefab });
+            SetField(harness.View, "_cellPrefabs", prefabs);
             SetField(harness.View, "_settings", NewSettings(cellSize, spacing, prewarmCount));
 
             harness.Root.SetActive(true); // Awake -> OnInitialize
             return harness;
         }
+
+        /// <summary>
+        /// Real rendered size of the cell bound to a data index, along the scroll axis. Reads the
+        /// rect rather than the view's bookkeeping, so it can catch a size the view believes it
+        /// applied but never wrote.
+        /// </summary>
+        public float CellSizeOf(int index)
+        {
+            ScrollAxis axis = ScrollAxis.From(Direction);
+
+            foreach (TestCell cell in Content.GetComponentsInChildren<TestCell>())
+            {
+                if (cell.Index != index) continue;
+                return axis.SizeOf(((RectTransform)cell.transform).rect);
+            }
+            return float.NaN;
+        }
+
+        /// <summary>Content rect's own extent along the scroll axis.</summary>
+        public float ContentSize => ScrollAxis.From(Direction).SizeOf(Content.rect);
 
         /// <summary>Installs the standard provider: rent prefab 0, record the index, hand it back.</summary>
         public void UseDefaultProvider()
@@ -113,7 +146,9 @@ namespace Sinkii09.UIFramework.Tests
 
         public void Destroy()
         {
-            if (Prefab != null) UnityEngine.Object.DestroyImmediate(Prefab.gameObject);
+            foreach (TestCell prefab in Prefabs)
+                if (prefab != null) UnityEngine.Object.DestroyImmediate(prefab.gameObject);
+
             if (Root != null) UnityEngine.Object.DestroyImmediate(Root);
         }
 

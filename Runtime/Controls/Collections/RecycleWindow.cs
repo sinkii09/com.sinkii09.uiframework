@@ -89,14 +89,21 @@ namespace Sinkii09.UIFramework
         ///
         /// <para>Doubling covers the mirror case, where a window arrives oversized and must recycle
         /// about as many cells as it creates before it settles.</para>
+        ///
+        /// <para><paramref name="minStride"/> is the <i>smallest</i> advance any one iteration can
+        /// make — with per-item sizes, a list of 200px rows carrying one 4px separator converges at
+        /// the rate of the 4px row, so the budget must be sized against it. Averaging would produce
+        /// a bound that is usually generous and occasionally, silently, short: the same defect as the
+        /// fixed cap this replaced. It is a <i>stride</i>, spacing included, because that is what an
+        /// iteration actually advances.</para>
         /// </summary>
-        public static int MaxIterationsFor(float viewportSize, float createDistance, float stride, int itemCount)
+        public static int MaxIterationsFor(float viewportSize, float createDistance, float minStride, int itemCount)
         {
-            if (stride <= 0f || itemCount <= 0) return MinIterations;
+            if (minStride <= 0f || itemCount <= 0) return MinIterations;
 
             double span = viewportSize + 2d * createDistance;
             // +2 for the partial cells the span's two edges can straddle.
-            double cells = Math.Ceiling(span / stride) + 2d;
+            double cells = Math.Ceiling(span / minStride) + 2d;
 
             // Never budget for more cells than the list actually has.
             if (cells > itemCount + 1) cells = itemCount + 1;

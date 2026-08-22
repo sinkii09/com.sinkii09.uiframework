@@ -27,9 +27,10 @@ namespace Sinkii09.UIFramework
             handle.Index = index;
             handle.PrefabId = _pendingPrefabId;
             handle.Offset = OffsetOf(index);
-            handle.MeasuredSize = _settings.CellSize;
+            handle.DeclaredSize = _offsets.SizeOf(index);
             handle.CreatedTick = _tick;
 
+            ContentLayout.SizeCell(handle.Rect, handle.DeclaredSize, _axis);
             ContentLayout.PlaceCell(handle.Rect, handle.Offset, _axis);
             return handle;
         }
@@ -94,6 +95,15 @@ namespace Sinkii09.UIFramework
             handle.Rect = (RectTransform)cell.transform;
             handle.PrefabId = _pendingPrefabId;
 
+            // Size here too, not only in CreateAt: this is the second bind path, and it re-rents —
+            // on a multi-prefab list the replacement comes from a different pool carrying whatever
+            // size its previous index had. Invisible to any single-prefab test.
+            //
+            // Read the table rather than handle.DeclaredSize: the two agree today only because every
+            // path that changes sizes also releases every cell, which is an invariant elsewhere in
+            // the file rather than anything this method enforces.
+            handle.DeclaredSize = _offsets.SizeOf(index);
+            ContentLayout.SizeCell(handle.Rect, handle.DeclaredSize, _axis);
             ContentLayout.PlaceCell(handle.Rect, handle.Offset, _axis);
             _pool.FlushRecycled();
         }

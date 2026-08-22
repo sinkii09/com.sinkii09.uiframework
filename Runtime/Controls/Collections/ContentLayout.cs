@@ -35,13 +35,21 @@ namespace Sinkii09.UIFramework
         /// Prepares a freshly instantiated cell. Anchors are written to the <b>instance</b>, never
         /// back to the prefab asset — mutating a project asset at runtime is a side effect that
         /// survives play mode and silently rewrites the author's prefab.
+        ///
+        /// <para>Deliberately does not size the cell: this runs once per instantiation, and a pooled
+        /// cell serves many indices. See <see cref="SizeCell"/>.</para>
         /// </summary>
-        public static void ConfigureCell(RectTransform cell, float cellSize, in ScrollAxis axis)
+        public static void ConfigureCell(RectTransform cell, in ScrollAxis axis)
         {
             ConfigureRect(cell, axis);
             cell.localScale = Vector3.one;
             cell.localRotation = Quaternion.identity;
-            SetSizeAlongAxis(cell, cellSize, axis);
+        }
+
+        /// <summary>Sizes a cell along the scroll axis. Applied per bind, not per instantiation.</summary>
+        public static void SizeCell(RectTransform cell, float size, in ScrollAxis axis)
+        {
+            SetSizeAlongAxis(cell, size, axis);
         }
 
         /// <summary>Places a cell so its leading edge sits at <paramref name="offset"/>.</summary>

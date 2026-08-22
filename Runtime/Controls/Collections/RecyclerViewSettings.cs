@@ -9,9 +9,9 @@ namespace Sinkii09.UIFramework
     [Serializable]
     public class RecyclerViewSettings
     {
-        [Tooltip("Declared uniform cell size along the scroll axis. Phase 1 requires this up front: " +
-                 "a cell's real size is only knowable after Bind, but content size and the recycle " +
-                 "window must be computable before any cell exists.")]
+        [Tooltip("Default cell size along the scroll axis, used for every item unless a size " +
+                 "provider is installed via SetItemSizeProvider. Declared rather than measured: " +
+                 "content size and the recycle window must be computable before any cell exists.")]
         [SerializeField] private float _cellSize = 100f;
 
         [Tooltip("Gap between consecutive cells, along the scroll axis.")]
