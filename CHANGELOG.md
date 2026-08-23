@@ -10,9 +10,12 @@ RecyclerView Phase 2 — variable cell size.
   and every cell position are exact from the first frame and the list never shifts under the user to
   correct an estimate. The trade is that a cell may not size itself; the editor-only measurement
   check reports one that tries. Pass `null` to return to the uniform `RecyclerViewSettings.CellSize`.
-- **`RecyclerView.SetItemSize(int, float)`** — re-declares one item's size and re-lays out what
-  follows, for a row that expands on tap. O(n) in the item count, and deliberately discarded by the
-  next `SetItemCount` (a count change re-asks the provider).
+- **`RecyclerView.RefreshSizes()`** — re-asks the provider for every index and re-lays out, keeping
+  the scroll position. Call it after changing whatever state the provider reads (an expanded row, a
+  re-measured message). There is deliberately **no per-index size setter**: the provider is the single
+  source of truth, so an override stored beside it would be silently discarded by the next
+  `SetItemCount`, and one keyed by index would outlive the item it was meant for as soon as the
+  list's contents shifted. Keep the size in your own data and re-ask.
 - Internal `IItemOffsets` with `UniformOffsets` and `PrefixSumOffsets` implementations. The window's
   decision core needed no change — `RecycleWindow.Decide`/`NeedsReseed` already compared offsets
   rather than stride — so this replaces the offset *supply*, not the recycling logic.

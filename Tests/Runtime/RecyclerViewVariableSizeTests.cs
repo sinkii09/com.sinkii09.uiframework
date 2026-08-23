@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
@@ -210,10 +211,18 @@ namespace Sinkii09.UIFramework.Tests
             return axis.ViewportStart(_harness.Content.anchoredPosition);
         }
 
+        /// <summary>
+        /// The supported way to change one row's size: mutate the state the provider reads, then
+        /// re-ask. There is no per-index setter — see <c>RecyclerView.RefreshSizes</c>.
+        /// </summary>
         [UnityTest]
-        public IEnumerator SetItemSize_MovesLaterCellsAndLeavesEarlierPositionsAlone()
+        public IEnumerator RefreshSizes_MovesLaterCellsAndLeavesEarlierPositionsAlone()
         {
-            BuildMixed(300);
+            var expanded = new HashSet<int>();
+            _harness = RecyclerViewHarness.Build(spacing: Spacing);
+            _harness.UseDefaultProvider();
+            _harness.View.SetItemSizeProvider(i => expanded.Contains(i) ? MixedSize(i) + 60f : MixedSize(i));
+            _harness.View.SetItemCount(300);
             yield return null;
 
             int changed = _harness.View.ShownIndices[2];
@@ -223,7 +232,8 @@ namespace Sinkii09.UIFramework.Tests
             float newSize = MixedSize(changed) + 60f;
             float delta = newSize - MixedSize(changed);
 
-            _harness.View.SetItemSize(changed, newSize);
+            expanded.Add(changed);
+            _harness.View.RefreshSizes();
             yield return null;
 
             // Assert over whatever is shown *after* the change rather than indices captured before
@@ -245,30 +255,20 @@ namespace Sinkii09.UIFramework.Tests
         }
 
         [UnityTest]
-        public IEnumerator SetItemSize_WithNoProviderInstalled_PromotesTheUniformTable()
+        public IEnumerator RefreshSizes_WithNoProviderInstalled_IsANoOp()
         {
             _harness = RecyclerViewHarness.Build(spacing: Spacing);
             _harness.UseDefaultProvider();
             _harness.View.SetItemCount(100);
             yield return null;
 
-            _harness.View.SetItemSize(1, 400f);
+            float before = _harness.View.TotalSize;
+
+            Assert.DoesNotThrow(() => _harness.View.RefreshSizes());
             yield return null;
 
-            Assert.AreEqual(400f, _harness.CellSizeOf(1), 0.5f);
-            Assert.AreEqual(100f, _harness.CellSizeOf(0), 0.5f, "other rows keep the uniform size");
-            Assert.AreEqual(100 * 110f - Spacing + 300f, _harness.View.TotalSize, 0.5f);
-        }
-
-        [Test]
-        public void SetItemSize_RejectsAnIndexOutsideTheList()
-        {
-            _harness = RecyclerViewHarness.Build(spacing: Spacing);
-            _harness.UseDefaultProvider();
-            _harness.View.SetItemCount(10);
-
-            Assert.Throws<ArgumentOutOfRangeException>(() => _harness.View.SetItemSize(10, 50f));
-            Assert.Throws<ArgumentOutOfRangeException>(() => _harness.View.SetItemSize(0, 0f));
+            Assert.AreEqual(before, _harness.View.TotalSize, 0.5f);
+            Assert.AreEqual(100f, _harness.CellSizeOf(0), 0.5f, "uniform sizing is unchanged");
         }
 
         [UnityTest]
@@ -341,25 +341,31 @@ namespace Sinkii09.UIFramework.Tests
         }
 
         /// <summary>
-        /// Pins the documented interaction rather than asserting it is desirable: a count change
-        /// re-asks the size provider, so per-index overrides do not survive it.
+        /// The payoff of having one source of truth: a size change survives a count change, because
+        /// it lives in the state the provider reads rather than in a table the rebuild overwrites.
+        /// The per-index setter this replaced was silently reverted here.
         /// </summary>
         [UnityTest]
-        public IEnumerator SetItemSize_IsDiscardedByALaterSetItemCount()
+        public IEnumerator SizesFromTheProvider_SurviveALaterSetItemCount()
         {
-            BuildMixed(300);
+            var expanded = new HashSet<int>();
+            _harness = RecyclerViewHarness.Build(spacing: Spacing);
+            _harness.UseDefaultProvider();
+            _harness.View.SetItemSizeProvider(i => expanded.Contains(i) ? 480f : MixedSize(i));
+            _harness.View.SetItemCount(300);
             yield return null;
 
             int changed = _harness.View.ShownIndices[1];
-            _harness.View.SetItemSize(changed, 480f);
+            expanded.Add(changed);
+            _harness.View.RefreshSizes();
             yield return null;
             Assert.AreEqual(480f, _harness.CellSizeOf(changed), 0.5f);
 
             _harness.View.SetItemCount(300);
             yield return null;
 
-            Assert.AreEqual(MixedSize(changed), _harness.CellSizeOf(changed), 0.5f,
-                "the provider is the source of truth after a count change");
+            Assert.AreEqual(480f, _harness.CellSizeOf(changed), 0.5f,
+                "the size did not survive a count change, so the provider is not the source of truth");
         }
 
         /// <summary>

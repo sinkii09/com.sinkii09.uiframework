@@ -24,9 +24,12 @@ namespace Sinkii09.UIFramework.Tests.Editor
         private static IItemOffsets Prefix(int count, float cellSize = CellSize, float spacing = Spacing)
             => new PrefixSumOffsets(count, _ => cellSize, spacing);
 
+        /// <summary>Alternating short/tall rows — the one size rule the mixed cases share.</summary>
+        private static float MixedSizeAt(int index) => index % 2 == 0 ? 40f : 200f;
+
         /// <summary>A list whose sizes actually vary, so uniform arithmetic cannot fake a pass.</summary>
         private static PrefixSumOffsets Mixed(int count, float spacing = Spacing)
-            => new PrefixSumOffsets(count, i => i % 2 == 0 ? 40f : 200f, spacing);
+            => new PrefixSumOffsets(count, MixedSizeAt, spacing);
 
         // ---- parity with the expressions phase 1 inlined -------------------------------------
 
@@ -225,24 +228,21 @@ namespace Sinkii09.UIFramework.Tests.Editor
             Assert.AreEqual(CellSize + Spacing, Uniform(10).MinStride, 0.01f);
         }
 
+        /// <summary>
+        /// Rebuilding under a changed provider is how a size change reaches the table — there is no
+        /// per-index setter, deliberately. Earlier items must not move; later ones shift by the delta.
+        /// </summary>
         [Test]
-        public void WithSize_ShiftsOnlyWhatFollows()
+        public void RebuildingWithAChangedProvider_ShiftsOnlyWhatFollows()
         {
             PrefixSumOffsets before = Mixed(10);
             float offsetOfTwoBefore = before.OffsetOf(2);
 
-            PrefixSumOffsets after = before.WithSize(4, 500f);
+            var after = new PrefixSumOffsets(10, i => i == 4 ? 500f : MixedSizeAt(i), Spacing);
 
             Assert.AreEqual(offsetOfTwoBefore, after.OffsetOf(2), 0.01f, "earlier items must not move");
             Assert.AreEqual(500f, after.SizeOf(4), 0.01f);
             Assert.AreEqual(before.OffsetOf(5) + (500f - before.SizeOf(4)), after.OffsetOf(5), 0.01f);
-        }
-
-        [Test]
-        public void WithSize_RejectsAnIndexOutsideTheList()
-        {
-            Assert.Throws<ArgumentOutOfRangeException>(() => Mixed(10).WithSize(10, 50f));
-            Assert.Throws<ArgumentOutOfRangeException>(() => Mixed(10).WithSize(-1, 50f));
         }
     }
 }

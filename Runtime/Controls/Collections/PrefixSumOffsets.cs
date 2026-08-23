@@ -14,7 +14,6 @@ namespace Sinkii09.UIFramework
     {
         private readonly float[] _starts;
         private readonly float[] _sizes;
-        private readonly float _spacing;
 
         public int Count => _starts.Length;
         public float TotalSize { get; }
@@ -33,7 +32,6 @@ namespace Sinkii09.UIFramework
             if (sizeProvider == null) throw new ArgumentNullException(nameof(sizeProvider));
             if (count < 0) count = 0;
 
-            _spacing = spacing;
             _starts = new float[count];
             _sizes = new float[count];
 
@@ -111,18 +109,5 @@ namespace Sinkii09.UIFramework
             return low;
         }
 
-        /// <summary>
-        /// Re-declares one item's size, shifting everything after it. O(n) in the item count — fine
-        /// for a tap-to-expand row, wrong for animating a size every frame.
-        /// </summary>
-        public PrefixSumOffsets WithSize(int index, float size)
-        {
-            if (index < 0 || index >= _starts.Length)
-                throw new ArgumentOutOfRangeException(nameof(index), $"Index {index} is outside [0, {_starts.Length}).");
-
-            float[] sizes = (float[])_sizes.Clone();
-            sizes[index] = size;
-            return new PrefixSumOffsets(sizes.Length, i => sizes[i], _spacing);
-        }
     }
 }

@@ -156,30 +156,26 @@ namespace Sinkii09.UIFramework
         }
 
         /// <summary>
-        /// Re-declares one item's size and re-lays out everything after it.
+        /// Re-asks the size provider for every index and re-lays the list out, keeping the scroll
+        /// position. Call after changing whatever state the provider reads — an expanded row, a
+        /// re-measured message.
         ///
-        /// <para>O(n) in the item count — sized for a row that expands on tap, not for animating a
-        /// size every frame.</para>
+        /// <para>O(n) in the item count. No-op when no provider is installed: uniform sizes have
+        /// nothing to re-ask.</para>
         ///
-        /// <para><b>Discarded by the next <see cref="SetItemCount"/>.</b> A count change re-asks the
-        /// size provider for every index, and this override lives outside it. That is deliberate —
-        /// after a count change an index no longer refers to the same item — but it means a caller
-        /// keeping expand/collapse state must re-apply it, or fold it into the provider instead.
-        /// With no provider installed the rebuild returns to the uniform size and every override is
-        /// dropped.</para>
+        /// <para>There is deliberately no per-index setter. The provider is the single source of
+        /// truth for size, so an override stored beside it would be discarded by the next
+        /// <see cref="SetItemCount"/> — and worse, an override keyed by index outlives the item it
+        /// was meant for as soon as the list's contents shift. Keeping the size in the consumer's own
+        /// data and re-asking is both smaller and always correct.</para>
         /// </summary>
-        public void SetItemSize(int index, float size)
+        public void RefreshSizes()
         {
-            if (index < 0 || index >= _itemCount)
-                throw new ArgumentOutOfRangeException(nameof(index), $"Index {index} is outside [0, {_itemCount}).");
-            if (!(size > 0f))
-                throw new ArgumentOutOfRangeException(nameof(size), $"Size must be > 0 (was {size}).");
-            if (RejectReentrant(nameof(SetItemSize))) return;
+            if (_sizeProvider == null) return;
+            if (RejectReentrant(nameof(RefreshSizes))) return;
 
-            // With no provider installed the table is uniform and immutable, so promote it. The
-            // alternative — refusing until the caller installs a trivial provider — buys nothing.
-            PrefixSumOffsets table = _offsets as PrefixSumOffsets ?? BuildUniformTable();
-            _offsets = table.WithSize(index, size);
+            IItemOffsets rebuilt = BuildOffsets(_sizeProvider);
+            _offsets = rebuilt;
 
             ReleaseAllShown();
             ApplyContentSize();
@@ -215,12 +211,6 @@ namespace Sinkii09.UIFramework
             {
                 _rebuildingOffsets = false;
             }
-        }
-
-        private PrefixSumOffsets BuildUniformTable()
-        {
-            float cellSize = _settings.CellSize;
-            return new PrefixSumOffsets(_itemCount, _ => cellSize, _settings.Spacing);
         }
 
         /// <summary>Sizes the content rect to the current table. No-ops before initialization.</summary>
