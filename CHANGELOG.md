@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-23
+
 RecyclerView Phase 2 — variable cell size.
 
 ### Added
