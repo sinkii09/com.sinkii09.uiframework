@@ -153,6 +153,11 @@ namespace Sinkii09.UIFramework.Tests
         protected override void BindViewModel(SecondTestViewModel vm) { }
     }
 
+    // A prefab root may be a SUBCLASS of the requested view type — CreateCoreAsync only checks
+    // viewType.IsInstanceOfType(instance). This makes instance.GetType() differ from the cache
+    // key, which the eviction sweep's live-view matching has to tolerate.
+    internal sealed class DerivedTestView : TestView { }
+
     // Carries an explicit [UIViewKey], so policy/key tests can prove UIViewKeys.For prefers the
     // attribute over the type name — the one case where the two derivations could have drifted
     // apart back when UIViewFactory and UIViewRegistry each implemented the rule themselves.

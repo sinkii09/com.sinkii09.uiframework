@@ -104,6 +104,30 @@ namespace Sinkii09.UIFramework
             builder.RegisterInstance(policies);
 
             builder.Register<IUINavigator, UINavigator>(Lifetime.Singleton).AsSelf();
+
+            // Opt-in: no sweeper, no behaviour change. Conditional registration is safe here
+            // precisely because nothing injects UIViewCacheSweeper (contrast UIViewPolicyResolver
+            // above, where conditional registration would break every consumer's construction).
+            // It needs the concrete UIViewFactory for the internal SweepAsync, so ensure the
+            // concrete type resolves to the same singleton instance as the interface.
+            if (config.ViewCacheGraceSeconds > 0f)
+            {
+                // Eviction destroys hidden views. Any reference game code still holds to one
+                // becomes a Unity-null and throws MissingReferenceException on next use — the
+                // HUD-channel pattern (views created straight from the factory, never pushed on
+                // the navigation stack) is the likely victim. With no policy asset, NOTHING is
+                // resident, so warn rather than let that surface as a mystery null later.
+                if (_viewPolicies == null)
+                {
+                    Debug.LogWarning("[UIFrameworkLifetimeScope] View cache eviction is enabled " +
+                        $"(ViewCacheGraceSeconds = {config.ViewCacheGraceSeconds}) but no UIViewPolicyConfig " +
+                        "is assigned, so no view is resident. Any view held by game code will be destroyed " +
+                        "once hidden past the grace period. Assign a policy asset and mark those views Resident.", this);
+                }
+
+                builder.Register<UIViewFactory>(_ => (UIViewFactory)_.Resolve<IUIViewFactory>(), Lifetime.Singleton);
+                builder.RegisterEntryPoint<UIViewCacheSweeper>();
+            }
             
             // --- Game Lifecycle ---
             builder.Register<ISceneLoader, SceneLoader>(Lifetime.Singleton);
