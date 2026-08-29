@@ -125,6 +125,24 @@ namespace Sinkii09.UIFramework
         // "evict everything eligible right now" — which is exactly what the tests want, and is
         // why they can be deterministic without touching wall-clock time. Do not wire config
         // straight through to this parameter without preserving that check.
+        // True when this type is already warm (cached) OR is being warmed right now (in flight).
+        // `!= null` on the cache hit because a scene unload leaves a Unity-null entry behind that
+        // must be treated as a miss.
+        //
+        // Exists for UIViewPreloader, and BOTH halves matter:
+        //  - cached: warming again would run CreateCoreAsync's cache-hit path, which calls
+        //    FactoryReset() and disposes the view's scope and ViewModel — fine for a hidden view,
+        //    destructive for one that is currently on screen.
+        //  - pending: _cache is written only at the END of CreateCoreAsync while _pending is set at
+        //    the start, so a first ShowAsync that is mid-creation is invisible to a cache-only
+        //    probe. The preloader would then join that in-flight creation via the dedup path and
+        //    deactivate an instance it did not create — the same bug one step earlier, saved today
+        //    only by continuation-ordering luck.
+        internal bool IsCachedOrPending(Type viewType)
+            => viewType != null
+               && (_pending.ContainsKey(viewType)
+                   || (_cache.TryGetValue(viewType, out var view) && view != null));
+
         internal async UniTask<int> SweepAsync(
             IReadOnlyList<IUIView> live, float graceSeconds,
             Func<Type, bool> isResident, CancellationToken ct = default)

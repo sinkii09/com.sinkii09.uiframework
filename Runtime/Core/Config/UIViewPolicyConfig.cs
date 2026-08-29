@@ -20,7 +20,7 @@ namespace Sinkii09.UIFramework
         [Tooltip("Draw a dimming backdrop behind this view while it is the top of the navigation stack.")]
         public bool NeedsBackdrop;
 
-        [Tooltip("Warm this view during boot so its first ShowAsync doesn't pay load + instantiate + injection mid-gameplay. Implies Resident.")]
+        [Tooltip("Warm this view during boot so its first ShowAsync doesn't pay the asset load, the Instantiate or the layer reparent. The child scope and ViewModel are still rebuilt on first show, so a ViewModel constructed here is disposed and replaced — keep ViewModel constructors free of side effects. Implies Resident. Nothing preloads automatically; call UIViewPreloader.PreloadAllAsync from your boot sequence.")]
         public bool PreloadOnBoot;
 
         public static UIViewPolicy Default => default;

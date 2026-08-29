@@ -60,7 +60,12 @@ namespace Sinkii09.UIFramework
             RegisterLoader(builder, config);
 
             builder.Register<IUIAnimator, DOTweenUIAnimator>(Lifetime.Singleton);
-            builder.Register<IUIViewFactory, UIViewFactory>(Lifetime.Singleton);
+            // .AsSelf() so the concrete type resolves to the SAME singleton — UIViewCacheSweeper
+            // and UIViewPreloader both need it for internal members. Same idiom as UINavigator
+            // below. Deliberately not a lambda alias resolving the interface: that registers a
+            // second entry for one IDisposable instance (double-dispose risk) and hard-casts, so
+            // it would throw at resolve time if a game's Configure override swapped the interface.
+            builder.Register<IUIViewFactory, UIViewFactory>(Lifetime.Singleton).AsSelf();
             builder.Register<INavigationStack, NavigationStack>(Lifetime.Singleton);
             builder.Register<IUIStateMachine, UIStateMachine>(Lifetime.Singleton);
 
@@ -110,11 +115,16 @@ namespace Sinkii09.UIFramework
 
             builder.Register<IUINavigator, UINavigator>(Lifetime.Singleton).AsSelf();
 
+            // Warms views marked PreloadOnBoot. Registered always, but never runs on its own —
+            // the game calls PreloadAllAsync() from its own boot sequence. With no policy asset
+            // nothing is marked, so the call is a no-op returning 0.
+            builder.Register<UIViewPreloader>(Lifetime.Singleton);
+
             // Opt-in: no sweeper, no behaviour change. Conditional registration is safe here
             // precisely because nothing injects UIViewCacheSweeper (contrast UIViewPolicyResolver
             // above, where conditional registration would break every consumer's construction).
-            // It needs the concrete UIViewFactory for the internal SweepAsync, so ensure the
-            // concrete type resolves to the same singleton instance as the interface.
+            // It needs the concrete UIViewFactory for the internal SweepAsync, which the .AsSelf()
+            // on the factory registration above provides unconditionally.
             if (config.ViewCacheGraceSeconds > 0f)
             {
                 // Eviction destroys hidden views. Any reference game code still holds to one
@@ -130,7 +140,6 @@ namespace Sinkii09.UIFramework
                         "once hidden past the grace period. Assign a policy asset and mark those views Resident.", this);
                 }
 
-                builder.Register<UIViewFactory>(_ => (UIViewFactory)_.Resolve<IUIViewFactory>(), Lifetime.Singleton);
                 builder.RegisterEntryPoint<UIViewCacheSweeper>();
             }
             
