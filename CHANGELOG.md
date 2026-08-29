@@ -2,6 +2,53 @@
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-29
+
+Per-view policy, and the three production concerns a long session forces you to solve: cache
+eviction, modal backdrops, preloading. **Everything defaults OFF** — a project that upgrades and
+changes nothing behaves identically, and no public interface changed.
+
+### Added
+- **`UIViewPolicyConfig`** (`Create > UIFramework > View Policy Config`) — per-view `Resident` /
+  `NeedsBackdrop` / `PreloadOnBoot` flags, plus `UIViewPolicyResolver` to resolve them. Assign it on
+  `UIFrameworkLifetimeScope`; leaving it empty means framework defaults for every view. Entries are
+  keyed by the view's **load key** (its `[UIViewKey]` value, else the class name) because a
+  ScriptableObject cannot serialize a `Type` — declaring policy under the class name of a view that
+  carries `[UIViewKey]` therefore does nothing, so boot-time validation warns on any key matching no
+  registered view.
+- **Timed cache eviction** — `UIViewCacheSweeper` periodically destroys views idle past
+  `UIFrameworkConfig.ViewCacheGraceSeconds` (`0` = disabled, the default). Previously
+  `UIViewFactory._cache` only ever grew: every view a player opened held its GameObject and its
+  loader handle for the whole session. A view is evicted only when it is not pending, not on the
+  navigation stack, not `Resident`, not visible, not active, and idle past the grace period.
+- **`UIBackdrop`** — one reusable dimming `Image` parked directly beneath any view whose policy sets
+  `NeedsBackdrop`, so popup prefabs stop hand-rolling their own. Colour from
+  `UIFrameworkConfig.BackdropColor`. Driven by `UINavigator.RefreshLayerBlocking`, i.e. the same
+  authority as layer blocking.
+- **`UIViewPreloader`** — warms views marked `PreloadOnBoot` so their first `ShowAsync` doesn't pay
+  the asset load, the `Instantiate` or the layer reparent. Nothing preloads automatically; call
+  `PreloadAllAsync()` from your own boot sequence. `PreloadOnBoot` implies `Resident`, or the sweeper
+  would destroy exactly what preload warmed. Note it does **not** save the child scope or the
+  ViewModel — those are rebuilt on first show, so keep ViewModel constructors free of side effects.
+- **`UIViewKeys.For(Type)`** — single source of the load-key derivation. `UIViewFactory.GetKey` and
+  `UIViewRegistry.AutoRegister` previously implemented the same rule independently, with nothing
+  keeping them in agreement.
+
+### Fixed
+- **`UINavigator.ShowAsync` could leave layer blocking applied for a view that was never pushed.**
+  `NavigationStack.PushAsync` *warns and returns* at `MaxNavigationDepth` rather than throwing, so
+  the pre-push refresh was left describing a view nobody could see or close. It now re-derives from
+  the real top of stack whenever the push did not land, and its `catch` refreshes before rethrowing.
+  Previously an invisible raycaster mis-toggle; with a backdrop it would have been a full-screen
+  softlock.
+- **A view deactivated by a failed hide no longer raises a backdrop.** `UIViewBase.HideAsync`
+  deactivates then rethrows, and `NavigationStack.PopAsync` propagates before removing, so a view
+  whose hide animation threw is briefly deactivated *and* still top of stack.
+
+### Changed
+- `builder.Register<IUIViewFactory, UIViewFactory>` now carries `.AsSelf()`, so the concrete type
+  resolves to the same singleton for the sweeper and preloader.
+
 ## [1.5.0] - 2026-08-23
 
 RecyclerView Phase 2 — variable cell size.
