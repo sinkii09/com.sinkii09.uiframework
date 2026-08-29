@@ -20,6 +20,9 @@ namespace Sinkii09.UIFramework
         [SerializeField] private UIFrameworkConfig _config;
         [SerializeField] private UIRootLayerRefs _layers;
 
+        [Tooltip("Optional. Per-view policy (resident / backdrop / preload). Leave empty for framework defaults — every view gets UIViewPolicy.Default.")]
+        [SerializeField] private UIViewPolicyConfig _viewPolicies;
+
         protected override void Awake()
         {
             if (_instance != null && _instance != this)
@@ -89,6 +92,17 @@ namespace Sinkii09.UIFramework
             // Scans assemblies for concrete UIView<T> subclasses; populates UIViewRegistry.Registrations.
             UIViewRegistry.AutoRegister();
             builder.RegisterInstance(UIViewRegistry.Registrations);
+
+            // Registered UNCONDITIONALLY even when _viewPolicies is null. VContainer ignores C#
+            // optional-parameter defaults, so a conditionally registered resolver would throw
+            // VContainerException while constructing every consumer that takes one. The resolver
+            // handles a null config itself and hands back UIViewPolicy.Default for every view.
+            // (Note this is why we build the resolver here rather than RegisterInstance(_viewPolicies) —
+            // RegisterInstance derives the implementation type from instance.GetType() and throws on null.)
+            var policies = new UIViewPolicyResolver(_viewPolicies);
+            policies.ValidateAgainst(UIViewRegistry.Registrations);
+            builder.RegisterInstance(policies);
+
             builder.Register<IUINavigator, UINavigator>(Lifetime.Singleton).AsSelf();
             
             // --- Game Lifecycle ---

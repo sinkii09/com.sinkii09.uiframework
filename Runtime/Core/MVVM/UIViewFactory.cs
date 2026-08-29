@@ -32,6 +32,12 @@ namespace Sinkii09.UIFramework
         // mismatched second caller is at least warned instead of silently getting the wrong ViewModel.
         private readonly Dictionary<Type, (Type VmType, UniTaskCompletionSource<IUIView> Source)> _pending = new();
 
+        // Deliberately takes NO UIViewPolicyResolver. VContainer ignores C# default parameter
+        // values (ResolveOrParameter never reads ParameterInfo.HasDefaultValue), so adding one
+        // — even as `= null` — makes it a HARD dependency and breaks every hand-built container
+        // that doesn't register it. Policy is instead supplied per-call by the caller that owns
+        // it (see the isResident predicate on SweepAsync), keeping this constructor's contract
+        // unchanged for existing consumers.
         [Inject]
         public UIViewFactory(IUILoader loader, IObjectResolver container, UIRootLayerRefs layers)
         {

@@ -143,6 +143,27 @@ namespace Sinkii09.UIFramework.Tests
         }
     }
 
+    // Second view/VM pair. Needed wherever a test must distinguish "this view" from "some other
+    // view" — e.g. asserting the preload set contains exactly one of two registered views, or that
+    // evicting one cached type leaves the other alone. TestView alone cannot express that.
+    internal class SecondTestViewModel : ViewModelBase { }
+
+    internal class SecondTestView : UIView<SecondTestViewModel>
+    {
+        protected override void BindViewModel(SecondTestViewModel vm) { }
+    }
+
+    // Carries an explicit [UIViewKey], so policy/key tests can prove UIViewKeys.For prefers the
+    // attribute over the type name — the one case where the two derivations could have drifted
+    // apart back when UIViewFactory and UIViewRegistry each implemented the rule themselves.
+    [UIViewKey(Key)]
+    internal class TestViewWithKey : UIView<TestViewModel>
+    {
+        internal const string Key = "custom/test-view-key";
+
+        protected override void BindViewModel(TestViewModel vm) { }
+    }
+
     // Proves the C1 DI binding fix: RegisterInstance(instance, viewType) binds the CONCRETE view
     // type, so a ViewModel that injects the concrete view resolves regardless of which CreateAsync
     // overload created it (previously RegisterInstance(instance) bound UIViewBase only, on the
