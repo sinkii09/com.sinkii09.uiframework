@@ -103,6 +103,11 @@ namespace Sinkii09.UIFramework
             policies.ValidateAgainst(UIViewRegistry.Registrations);
             builder.RegisterInstance(policies);
 
+            // Also unconditional, and for the same reason — UINavigator takes it, and VContainer
+            // would throw on construction if it were only registered when some policy happens to
+            // set NeedsBackdrop. With no policy asset it simply never shows anything.
+            builder.Register<UIBackdrop>(Lifetime.Singleton);
+
             builder.Register<IUINavigator, UINavigator>(Lifetime.Singleton).AsSelf();
 
             // Opt-in: no sweeper, no behaviour change. Conditional registration is safe here

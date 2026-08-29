@@ -16,6 +16,7 @@ namespace Sinkii09.UIFramework
         private readonly IUIStateMachine _stateMachine;
         private readonly IUIViewFactory _factory;
         private readonly UIRootLayerRefs _layers;
+        private readonly UIBackdrop _backdrop;
 
         private readonly Dictionary<Type, Func<CancellationToken, UniTask<IUIView>>> _creators = new();
         private readonly Dictionary<Type, Func<object, CancellationToken, UniTask<IUIView>>> _argsCreators = new();
@@ -31,15 +32,20 @@ namespace Sinkii09.UIFramework
         public IUIView Current => _stack.Peek();
         public bool IsTransitioning => _isTransitioning;
 
+        // `backdrop` is trailing-optional for SOURCE compatibility only — existing tests construct
+        // this positionally. It is NOT an optional dependency: VContainer ignores C# default
+        // parameter values, so UIFrameworkLifetimeScope registers a UIBackdrop unconditionally.
+        // Every use below is null-guarded purely so hand-built test containers stay simple.
         [Inject]
         public UINavigator(INavigationStack stack, IUIStateMachine stateMachine,
             IUIViewFactory factory, IReadOnlyList<UIViewRegistration> registrations,
-            UIRootLayerRefs layers)
+            UIRootLayerRefs layers, UIBackdrop backdrop = null)
         {
             _stack = stack;
             _stateMachine = stateMachine;
             _factory = factory;
             _layers = layers;
+            _backdrop = backdrop;
             foreach (var r in registrations)
                 _creators[r.ViewType] = ct => _factory.CreateAsync(r.ViewType, r.VmType, r.Key, ct);
         }
@@ -82,6 +88,17 @@ namespace Sinkii09.UIFramework
                 // on lower layers during the entrance transition.
                 RefreshLayerBlocking(view);
                 await _stack.PushAsync(view, ct);
+
+                // PushAsync can decline silently (max navigation depth) or throw. Either way the
+                // `pending` refresh above is now describing a view that is not on the stack, so
+                // re-derive from the real top. Without this, blocking (and the backdrop, which is
+                // a full-screen raycast target) stays applied for a view nobody can see or close.
+                if (!ReferenceEquals(_stack.Peek(), view)) RefreshLayerBlocking();
+            }
+            catch
+            {
+                TryRefreshLayerBlocking();
+                throw;
             }
             finally { if (ownsFlag) _isTransitioning = false; }
         }
@@ -107,6 +124,15 @@ namespace Sinkii09.UIFramework
                 // Block layers below this view BEFORE the push animation.
                 RefreshLayerBlocking(view);
                 await _stack.PushAsync(view, ct);
+
+                // See the no-args overload: a declined or failed push must not leave blocking and
+                // the backdrop pinned to a view that never made it onto the stack.
+                if (!ReferenceEquals(_stack.Peek(), view)) RefreshLayerBlocking();
+            }
+            catch
+            {
+                TryRefreshLayerBlocking();
+                throw;
             }
             finally { if (ownsFlag) _isTransitioning = false; }
         }
@@ -208,14 +234,29 @@ namespace Sinkii09.UIFramework
         // pending is passed from ShowAsync (before PushAsync) so blocking applies during entrance.
         private void RefreshLayerBlocking(IUIView pending = null)
         {
-            if (_layers == null) return;
-
             IUIView top = pending ?? _stack.Peek();
 
-            if (top is UIViewBase vb)
-                _layers.BlockLayersBelow(vb.Layer);
-            else
-                _layers.SetAllLayersInteractable(true);
+            if (_layers != null)
+            {
+                if (top is UIViewBase vb)
+                    _layers.BlockLayersBelow(vb.Layer);
+                else
+                    _layers.SetAllLayersInteractable(true);
+            }
+
+            // Backdrop follows the same authority as layer blocking: whatever is on top decides.
+            // `pending != null` tells it this view is mid-show — the one case where a still-inactive
+            // GameObject legitimately gets a backdrop.
+            _backdrop?.Refresh(top, isPending: pending != null);
+        }
+
+        // RefreshLayerBlocking on a recovery path must never replace the exception being handled
+        // (including an OperationCanceledException) with one of its own — e.g. a
+        // MissingReferenceException from a layer transform destroyed by a scene unload.
+        private void TryRefreshLayerBlocking()
+        {
+            try { RefreshLayerBlocking(); }
+            catch (Exception ex) { Debug.LogException(ex); }
         }
 
         private async UniTask<IUIView> CreateViewAsync<TView, TViewModel>(CancellationToken ct)

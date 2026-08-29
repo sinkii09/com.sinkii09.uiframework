@@ -30,5 +30,10 @@ namespace Sinkii09.UIFramework
         [Min(0.1f)]
         [Tooltip("How often the eviction sweep runs. Ignored when ViewCacheGraceSeconds is 0.")]
         public float ViewCacheSweepIntervalSeconds = 5f;
+
+        // One global colour, not per-view: a project wants a consistent dim, and per-view colours
+        // were cut as speculative. Only applies to views marked NeedsBackdrop in UIViewPolicyConfig.
+        [Tooltip("Dim colour drawn behind views whose policy sets NeedsBackdrop.")]
+        public Color BackdropColor = new Color(0f, 0f, 0f, 0.5f);
     }
 }
