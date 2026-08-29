@@ -87,8 +87,7 @@ namespace Sinkii09.UIFramework
                     var vmType = GetViewModelType(type, uiViewGenericBase);
                     if (vmType == null) continue;
 
-                    var keyAttr = (UIViewKeyAttribute)Attribute.GetCustomAttribute(type, typeof(UIViewKeyAttribute));
-                    var key = keyAttr?.Key ?? type.Name;
+                    var key = UIViewKeys.For(type);
 
                     if (!_registeredKeys.Add(key))
                     {

@@ -181,12 +181,9 @@ namespace Sinkii09.UIFramework
             }
         }
 
-        // Single source of truth for key derivation — used by both public generic overloads.
-        private static string GetKey(Type viewType)
-        {
-            var keyAttr = Attribute.GetCustomAttribute(viewType, typeof(UIViewKeyAttribute)) as UIViewKeyAttribute;
-            return keyAttr?.Key ?? viewType.Name;
-        }
+        // Delegates to UIViewKeys so the factory and UIViewRegistry cannot drift apart —
+        // they derived this independently before.
+        private static string GetKey(Type viewType) => UIViewKeys.For(viewType);
 
         private void ReparentToLayer(UIViewBase view)
         {
