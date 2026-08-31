@@ -302,8 +302,10 @@ namespace Sinkii09.UIFramework.Editor
             scaler.referenceResolution = new Vector2(1080, 1920);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0.5f;
-            string[] layerNames = { "HUD", "Screen", "Popup", "Overlay", "Debug" };
-            int[] layerOrders = { 0, 100, 200, 300, 400 };
+            // Keep in sync with UILayer's declaration order and with
+            // UIFrameworkUIRootUpgrader.LayerSpecs, which is what actually wires these up.
+            string[] layerNames = { "HUD", "Screen", "Popup", "Tooltip", "Overlay", "Debug" };
+            int[] layerOrders = { 0, 100, 200, 250, 300, 400 };
             for (int i = 0; i < layerNames.Length; i++)
             {
                 var child = new GameObject(layerNames[i]);
@@ -336,7 +338,15 @@ namespace Sinkii09.UIFramework.Editor
             PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             DestroyImmediate(root);
             AssetDatabase.Refresh();
-            Mark(6, Status.Done); Log("Step 7: UIRoot prefab created with SafeAreaProvider + UIFrameworkLifetimeScope. Assign _config and _layers in Inspector."); return true;
+            // This step cannot assign _layers itself: the installer assembly deliberately does not
+            // reference the runtime assembly (it must run before that assembly compiles), so it
+            // has no UIRootLayerRefs type to write into. Run the upgrader afterwards — it wires
+            // every layer reference, and is also the migration path for UIRoots created before a
+            // layer was added.
+            Mark(6, Status.Done);
+            Log("Step 7: UIRoot prefab created with SafeAreaProvider + UIFrameworkLifetimeScope. " +
+                "Now run Tools/UIFramework/Upgrade UIRoot Layers to wire _layers, then assign _config in the Inspector.");
+            return true;
         }
 
         private bool Step8_CreateConfigAsset()

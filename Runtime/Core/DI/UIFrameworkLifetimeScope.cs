@@ -94,6 +94,21 @@ namespace Sinkii09.UIFramework
             else
                 builder.RegisterInstance<ITransitionOverlay>(new NullTransitionOverlay());
 
+            // Resident tooltip owner — same shape as the overlay above: a TooltipViewBase anywhere
+            // in the scene means the real service, absent means the Null-Object, and the
+            // registration is unconditional either way because VContainer ignores C# optional
+            // parameter defaults (UINavigator takes an ITooltipService).
+            //
+            // RegisterEntryPoint is required, not stylistic: TooltipService.Initialize() discovers
+            // and injects the tooltip views, and Tick() drives the whole timing state machine.
+            // A plain Register would leave both undispatched and tooltips silently dead.
+            // AsImplementedInterfaces (inside RegisterEntryPoint) already maps ITooltipService;
+            // AsSelf is for tests that need the concrete type, mirroring GameLifecycleManager below.
+            if (FindAnyObjectByType<TooltipViewBase>(FindObjectsInactive.Include) != null)
+                builder.RegisterEntryPoint<TooltipService>(Lifetime.Singleton).AsSelf();
+            else
+                builder.RegisterInstance<ITooltipService>(new NullTooltipService());
+
             // Scans assemblies for concrete UIView<T> subclasses; populates UIViewRegistry.Registrations.
             UIViewRegistry.AutoRegister();
             builder.RegisterInstance(UIViewRegistry.Registrations);

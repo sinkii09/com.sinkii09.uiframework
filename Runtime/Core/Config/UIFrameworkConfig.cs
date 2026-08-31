@@ -35,5 +35,34 @@ namespace Sinkii09.UIFramework
         // were cut as speculative. Only applies to views marked NeedsBackdrop in UIViewPolicyConfig.
         [Tooltip("Dim colour drawn behind views whose policy sets NeedsBackdrop.")]
         public Color BackdropColor = new Color(0f, 0f, 0f, 0.5f);
+
+        // --- Tooltip timing ---------------------------------------------------------------
+        // All four are consumed by TooltipService, which copies them into internal fields at
+        // construction so tests can drive the state machine at zero delay. Every wait derived
+        // from them uses DelayType.UnscaledDeltaTime — this project pauses with timeScale = 0,
+        // and a scaled delay would mean no tooltip ever appears in a pause menu.
+
+        [Min(0f)]
+        [Tooltip("Hover dwell before a tooltip appears. Click and focus bypass this — both are " +
+                 "deliberate acts, where a delay reads as lag.")]
+        public float TooltipShowDelaySeconds = 0.5f;
+
+        [Min(0f)]
+        [Tooltip("Grace period after the pointer leaves before the tooltip actually hides.")]
+        public float TooltipHideGraceSeconds = 0.1f;
+
+        [Min(0f)]
+        [Tooltip("While shown or in grace, a new target shows instantly for this long instead of " +
+                 "re-waiting the show delay. This is what makes sweeping across a grid feel responsive.")]
+        public float TooltipReShowWindowSeconds = 0.3f;
+
+        [Min(0f)]
+        [Tooltip("Touch press duration that counts as a long-press.")]
+        public float TooltipLongPressSeconds = 0.5f;
+
+        [Min(0f)]
+        [Tooltip("Pointer travel that cancels an in-progress long-press, so a scroll gesture " +
+                 "starting on a cell does not fire a tooltip.")]
+        public float TooltipLongPressMoveCancelPixels = 10f;
     }
 }

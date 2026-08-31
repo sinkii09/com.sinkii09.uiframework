@@ -17,6 +17,7 @@ namespace Sinkii09.UIFramework
         private readonly IUIViewFactory _factory;
         private readonly UIRootLayerRefs _layers;
         private readonly UIBackdrop _backdrop;
+        private readonly ITooltipService _tooltips;
 
         private readonly Dictionary<Type, Func<CancellationToken, UniTask<IUIView>>> _creators = new();
         private readonly Dictionary<Type, Func<object, CancellationToken, UniTask<IUIView>>> _argsCreators = new();
@@ -32,20 +33,22 @@ namespace Sinkii09.UIFramework
         public IUIView Current => _stack.Peek();
         public bool IsTransitioning => _isTransitioning;
 
-        // `backdrop` is trailing-optional for SOURCE compatibility only — existing tests construct
-        // this positionally. It is NOT an optional dependency: VContainer ignores C# default
-        // parameter values, so UIFrameworkLifetimeScope registers a UIBackdrop unconditionally.
+        // `backdrop` and `tooltips` are trailing-optional for SOURCE compatibility only — existing
+        // tests construct this positionally. They are NOT optional dependencies: VContainer ignores
+        // C# default parameter values, so UIFrameworkLifetimeScope registers a UIBackdrop and an
+        // ITooltipService (real or Null-Object) unconditionally.
         // Every use below is null-guarded purely so hand-built test containers stay simple.
         [Inject]
         public UINavigator(INavigationStack stack, IUIStateMachine stateMachine,
             IUIViewFactory factory, IReadOnlyList<UIViewRegistration> registrations,
-            UIRootLayerRefs layers, UIBackdrop backdrop = null)
+            UIRootLayerRefs layers, UIBackdrop backdrop = null, ITooltipService tooltips = null)
         {
             _stack = stack;
             _stateMachine = stateMachine;
             _factory = factory;
             _layers = layers;
             _backdrop = backdrop;
+            _tooltips = tooltips;
             foreach (var r in registrations)
                 _creators[r.ViewType] = ct => _factory.CreateAsync(r.ViewType, r.VmType, r.Key, ct);
         }
@@ -74,6 +77,10 @@ namespace Sinkii09.UIFramework
                 Debug.LogWarning($"[UINavigator] Transitioning — ShowAsync<{typeof(T).Name}> ignored.");
                 return;
             }
+            // A tooltip belongs to the screen that raised it. Layer blocking only toggles
+            // raycasters and never touches visibility, so without this the tooltip survives the
+            // navigation and sits rendered over the next view.
+            _tooltips?.HideImmediate();
             if (!_creators.TryGetValue(typeof(T), out var creator))
                 throw new InvalidOperationException(
                     $"[UINavigator] No creator for {typeof(T).Name}. Call Register<{typeof(T).Name}, TViewModel>() in installer.");
@@ -112,6 +119,7 @@ namespace Sinkii09.UIFramework
                 Debug.LogWarning($"[UINavigator] Transitioning — ShowAsync<{typeof(T).Name}> with args ignored.");
                 return;
             }
+            _tooltips?.HideImmediate();
             if (!_argsCreators.TryGetValue(typeof(T), out var creator))
                 throw new InvalidOperationException(
                     $"[UINavigator] No args-creator for {typeof(T).Name}. Call Register<{typeof(T).Name}, TViewModel, {typeof(TArgs).Name}>() in installer.");
@@ -181,6 +189,7 @@ namespace Sinkii09.UIFramework
                 Debug.LogWarning("[UINavigator] Transitioning — CloseAllAsync ignored.");
                 return;
             }
+            _tooltips?.HideImmediate();
             _isTransitioning = true;
             try { await _stack.ClearAsync(ct); }
             finally
@@ -202,6 +211,7 @@ namespace Sinkii09.UIFramework
                 Debug.LogWarning($"[UINavigator] Transitioning — ChangeStateAsync<{typeof(TState).Name}> ignored.");
                 return;
             }
+            _tooltips?.HideImmediate();
             _isTransitioning = true;
             try
             {

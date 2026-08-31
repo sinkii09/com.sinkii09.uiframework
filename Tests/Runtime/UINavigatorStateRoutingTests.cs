@@ -120,10 +120,13 @@ namespace Sinkii09.UIFramework.Tests
             builder.Register<IUIViewFactory, UIViewFactory>(Lifetime.Singleton);
             builder.RegisterInstance<INavigationStack>(new NavigationStack(null));
             builder.Register<IUIStateMachine, UIStateMachine>(Lifetime.Singleton);
-            // UINavigator takes a UIBackdrop. Its `= null` default does NOT make it optional —
-            // VContainer ignores C# default parameter values — so any hand-built container must
-            // register one, exactly as UIFrameworkLifetimeScope does.
+            // UINavigator takes a UIBackdrop and an ITooltipService. Their `= null` defaults do NOT
+            // make them optional — VContainer ignores C# default parameter values — so any
+            // hand-built container must register both, exactly as UIFrameworkLifetimeScope does.
+            // (The defaults exist only so the positional `new UINavigator(...)` calls in the other
+            // fixtures keep compiling.)
             builder.RegisterInstance(new UIBackdrop(new UIViewPolicyResolver(null), null));
+            builder.RegisterInstance<ITooltipService>(new NullTooltipService());
             builder.Register<IUINavigator, UINavigator>(Lifetime.Singleton).AsSelf();
 
             using var container = builder.Build();
