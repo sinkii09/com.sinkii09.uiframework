@@ -2,6 +2,52 @@
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-01
+
+Async lifetime utilities. Three additive pieces sharing one theme: **async work started from UI
+must have a defined owner, a defined cancellation point, and a defined restore-on-exit.** No
+existing signature changed; no migration needed.
+
+### Added
+- **`ViewModelBase.ShowToken`** — the token half of `_showDisposables`. Cancelled when the view
+  hides, replaced with a fresh one on the next show. Pass it to any async work started from
+  `OnShow()`. Until now a ViewModel had a per-show *disposable bag* but no per-show *cancellation*,
+  so a countdown or a fetch begun in `OnShow()` ran until the ViewModel itself was disposed — which
+  for a cached view may be never. Views were already covered (`OnShowAsync`/`OnHideAsync` receive a
+  `ct`); this closes the ViewModel side.
+- **`UIBindingExtensions.BindButtonAsync`** — button click → `Func<CancellationToken, UniTask>`,
+  with a re-entrancy guard and the same automatic listener removal as `BindButton`. The house style
+  was a synchronous `UnityAction` firing `.Forget()`, and nothing stopped the second and third press
+  from launching that many concurrent operations. `UINavigator`'s `_isTransitioning` guard does not
+  help — it protects navigation only, and only by silently dropping the call.
+  `disableWhileRunning` defaults to **false**: the guard is what makes this correct, greying the
+  button out is cosmetic, and it is the only mode that conflicts with `BindToInteractable` on the
+  same button.
+
+### Notes
+Three traps this is built against, none of which produce a compiler diagnostic:
+
+- **`CancellationTokenSource.Token` throws `ObjectDisposedException` after `Dispose()`.** `ShowToken`
+  returns `new CancellationToken(true)` once the ViewModel is disposed rather than touching the
+  dead source — work started against a dead ViewModel should stop, not run against `None`.
+- **`Cancel()` runs its registrations synchronously and rethrows them wrapped.** An exception from
+  someone else's continuation must not abort `NotifyHide` and skip the teardown, or every per-show
+  subscription leaks. Both the cancel *and* the bag disposal are contained: the CTS swap lives in a
+  `finally`, because a throw on the way through would otherwise strand the ViewModel on a cancelled
+  token **forever** — every later show silently no-opping all gated work. That is reachable, not
+  theoretical: `Button.onClick.RemoveListener` throws `MissingReferenceException` once the Button is
+  destroyed, and `BindButtonAsync` registers exactly that disposable.
+- **The swapped-out source must be disposed, but only after the field is swapped.** Disposing it
+  earlier makes `ShowToken` throw for anything `OnHide()` calls; not disposing it at all keeps its
+  registrations — and any linked source built from it — rooted for the ViewModel's whole life.
+
+`TabIndicator`'s bare `DOKill()` gained a comment, not a change: it is correct today because it
+tweens `anchoredPosition` only and every `MoveTo` writes a fresh target, and it silently becomes a
+corruption site the moment anyone adds a scale or colour tween there.
+
+### Tested against
+- Unity 6000.4.0f1 — EditMode 267 passed, PlayMode 205 passed
+
 ## [1.7.0] - 2026-08-31
 
 Tooltips: a resident, single-instance tooltip owned by the framework, driven by a small trigger
