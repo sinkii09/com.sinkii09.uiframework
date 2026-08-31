@@ -1,5 +1,7 @@
+using Cysharp.Threading.Tasks;
 using R3;
 using System;
+using System.Threading;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
@@ -105,6 +107,81 @@ namespace Sinkii09.UIFramework
             button.onClick.AddListener(handler);
             Disposable.Create(() => button.onClick.RemoveListener(handler))
                 .AddTo(ref disposables);
+        }
+
+        // Button click → async handler, with re-entrancy protection and the same automatic listener
+        // removal as BindButton. Use this whenever the handler awaits.
+        //
+        // Why it exists: the usual shape is a synchronous UnityAction that fires .Forget(), and
+        // nothing then stops the second, third or Nth press from launching that many concurrent
+        // operations. UINavigator's own _isTransitioning guard does not help — it protects
+        // navigation only (and by silently dropping the call), never the game's own async work.
+        //
+        // `ct` should be the ViewModel's ShowToken, so an in-flight operation is cancelled when the
+        // view hides. Note that disposing `disposables` removes the LISTENER but does not cancel a
+        // RUNNING operation — cancellation is the token's job, not the bag's.
+        //
+        // disableWhileRunning defaults to false deliberately. The re-entrancy guard is what makes
+        // this correct; greying the button out is cosmetic, and it is the only mode that conflicts
+        // with BindToInteractable on the same button (a ViewModel-pushed change arriving mid-flight
+        // is overwritten by the restore below). Opt in only when nothing else drives that button.
+        // Usage: _buyBtn.BindButtonAsync(vm.BuyAsync, ref _showDisposables, ShowToken);
+        public static void BindButtonAsync(
+            this Button button,
+            Func<CancellationToken, UniTask> handler,
+            ref DisposableBag disposables,
+            CancellationToken ct = default,
+            bool disableWhileRunning = false)
+        {
+            bool running = false;
+
+            UnityAction listener = () =>
+            {
+                // Not a programmer error — a user double-tapping is expected input, so no log.
+                if (running) return;
+                // Checked before touching interactable, so an already-dead binding does not
+                // disable-then-restore for a handler that would immediately throw OCE.
+                if (ct.IsCancellationRequested) return;
+                running = true;
+                RunAsync().Forget();
+            };
+
+            button.onClick.AddListener(listener);
+            Disposable.Create(() => button.onClick.RemoveListener(listener))
+                .AddTo(ref disposables);
+
+            async UniTaskVoid RunAsync()
+            {
+                // Declared out here so the finally can see it, but assigned INSIDE the try:
+                // `running` is already true by this point, so anything that throws before the
+                // finally would latch the guard and kill the button for the binding's whole life.
+                bool wasInteractable = false;
+                try
+                {
+                    // Captured, never assumed to be true: restoring a hardcoded `true` would
+                    // silently re-enable a button whose ViewModel had deliberately bound it false.
+                    wasInteractable = button.interactable;
+                    if (disableWhileRunning) button.interactable = false;
+                    await handler(ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected whenever the view hides mid-operation.
+                }
+                catch (Exception e)
+                {
+                    // Matches TooltipService.Enqueue's policy: a faulted handler must not take the
+                    // guard down with it, or the button is dead for the rest of the view's life.
+                    Debug.LogException(e);
+                }
+                finally
+                {
+                    running = false;
+                    // Unity fake-null: the view can be destroyed while the operation is in flight.
+                    if (disableWhileRunning && button != null)
+                        button.interactable = wasInteractable;
+                }
+            }
         }
     }
 }
