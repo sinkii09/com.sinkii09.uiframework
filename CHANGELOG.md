@@ -2,6 +2,76 @@
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-31
+
+Tooltips: a resident, single-instance tooltip owned by the framework, driven by a small trigger
+component. Four input sources, two content models. Opt-in — a project with no tooltip view in its
+scene gets `NullTooltipService` and behaves exactly as before.
+
+**Existing projects must run `Tools/UIFramework/Upgrade UIRoot Layers` once.** See Migration below.
+
+### Added
+- **`ITooltipService` / `TooltipService`** — owns the one tooltip: which view is up, what it is
+  anchored to, and the timing state machine `Idle → Pending → Shown → Grace → Idle` with an instant
+  re-show window (sweeping across a grid shows immediately rather than re-waiting the dwell). It is
+  deliberately **not** a navigation view: `UINavigator`'s `_isTransitioning` guard silently drops
+  concurrent calls, and back-button and `MaxNavigationDepth` semantics are all wrong for something
+  that fires ten times a second. It follows `TransitionOverlayView`'s residency model instead —
+  extends `UIViewBase`, not `UIView<T>`, so `UIViewRegistry.AutoRegister` never sees it.
+  The machine advances in `Tick()` off `Time.unscaledDeltaTime`, not by awaiting `UniTask.Delay`, so
+  tooltips still appear while the game is paused at `timeScale = 0`.
+- **`TooltipViewBase` / `TooltipView` / `TooltipContent`** — the built-in composable-sections
+  tooltip (title, icon, body, variable-length stat lines, footer), every section optional. Subclass
+  `TooltipViewBase` and set its `_viewKey` for a project-specific look; a payload's `ViewKey` picks
+  the view, and null or empty routes to the built-in one.
+- **`TooltipTrigger`** (`Runtime/Controls/Core/`) — mouse hover, mouse click, gamepad/keyboard
+  focus, and touch long-press. Payload comes from an `ITooltipSource` on the widget, queried at show
+  time so a value changed since bind is current; failing that, from serialized inline title/body, so
+  a static hint needs no extra component. `NotifyContentChanged()` releases the tooltip when a
+  pooled cell is rebound in place.
+- **`Tools/UIFramework/Upgrade UIRoot Layers`** — adds missing layer children to an existing UIRoot
+  and wires the `_layers` references. Idempotent; skips prefab variants; also scans open scenes.
+  This also fixes a long-standing gap: the installer wizard created the layer GameObjects but
+  **never assigned `_layers` at all**, for any of the layers.
+- Five `UIFrameworkConfig` fields: `TooltipShowDelaySeconds`, `TooltipHideGraceSeconds`,
+  `TooltipReShowWindowSeconds`, `TooltipLongPressSeconds`, `TooltipLongPressMoveCancelPixels`.
+
+### Changed
+- **`UILayer` gained a `Tooltip` member, inserted between `Popup` and `Overlay`** (sortOrder 250) —
+  above popups so tooltips work inside modal dialogs, below `Overlay` so they can never draw over a
+  loading curtain. The ordinal is load-bearing (`UIRootLayerRefs.BlockLayersBelow` compares
+  `(int)layer`), so this renumbers `Overlay` and `Debug`. It is safe only because no `UILayer` value
+  is serialized anywhere — every use is a code-level `override Layer => UILayer.X`. **Verify that
+  again before inserting another member.**
+- `UINavigator` takes a trailing-optional `ITooltipService` and calls `HideImmediate()` in
+  `ShowAsync`, `ShowAsync<T,TArgs>`, `CloseAllAsync` and `ChangeStateAsync`. Layer blocking only
+  toggles raycasters and never touches visibility, so without this a tooltip outlives the screen
+  that raised it. Trailing-optional purely for **source** compatibility, exactly as `UIBackdrop` is:
+  VContainer ignores C# default parameter values, so a hand-built container must still register one.
+- `Editor.Tools` asmdef now references `Unity.ugui`.
+
+### Migration
+`UIRootLayerRefs` serialises by field *name*, so an existing UIRoot deserialises `Tooltip` as
+**null** — and `SetLayerInteractable` returns *silently* on a null transform, making the failure
+invisible. Run `Tools/UIFramework/Upgrade UIRoot Layers` once per project. If the layer is still
+missing at runtime the service falls back to the `Overlay` layer and logs one error naming the
+command, so tooltips degrade rather than vanish.
+
+### Notes
+Four traps this implementation is built against, each of which compiled clean:
+`UIViewBase.ShowAsync` re-enables `blocksRaycasts` after every show (a tooltip that takes raycasts
+strobes under the cursor, so it is re-asserted after both show and hide);
+`LayoutRebuilder.ForceRebuildLayoutImmediate` is a no-op on an inactive GameObject (bind and measure
+before activating and every appearance is sized against the *previous* payload);
+`UIViewBase.HideAsync` deactivates the GameObject in both its normal and its cancellation path, so
+view animations are **serialized rather than cancelled**; and a show that bails out must tear the
+current tooltip down rather than merely reset state, or it strands one on screen with the anchor
+watchdog switched off.
+
+### Tested against
+- Unity 6000.4.0f1 — EditMode 257 passed, PlayMode 198 passed
+
+
 ## [1.6.0] - 2026-08-29
 
 Per-view policy, and the three production concerns a long session forces you to solve: cache
