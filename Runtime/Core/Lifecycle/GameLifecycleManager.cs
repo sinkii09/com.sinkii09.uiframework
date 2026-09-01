@@ -76,7 +76,11 @@ namespace Sinkii09.UIFramework
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _exitToken);
-                await _navigator.ChangeStateAsync<BootState>(cts.Token);
+                // IAsyncStartable cannot return a result, so a refused boot would otherwise leave
+                // the game on an empty stack with nothing but a warning to explain it.
+                NavigationResult result = await _navigator.ChangeStateAsync<BootState>(cts.Token);
+                if (result != NavigationResult.Completed)
+                    Debug.LogError($"[GameLifecycleManager] Boot transition was {result} — the game has no initial state.");
             }
             finally
             {
@@ -85,19 +89,20 @@ namespace Sinkii09.UIFramework
         }
 
         // ct = default means only Application.exitCancellationToken cancels this transition.
-        public async UniTask ChangeStateAsync<T>(CancellationToken ct = default) where T : IGameState
+        public async UniTask<NavigationResult> ChangeStateAsync<T>(CancellationToken ct = default) where T : IGameState
         {
             if (_isTransitioning)
             {
                 Debug.LogWarning($"[GameLifecycleManager] Transitioning — ChangeStateAsync<{typeof(T).Name}> ignored.");
-                return;
+                return NavigationResult.Rejected;
             }
             _isTransitioning = true;
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _exitToken);
                 await ShowOverlaySafeAsync(cts.Token);
-                await _navigator.ChangeStateAsync<T>(cts.Token);
+                // Propagated, not discarded: the navigator's own guard can refuse independently.
+                return await _navigator.ChangeStateAsync<T>(cts.Token);
             }
             finally
             {
@@ -115,13 +120,13 @@ namespace Sinkii09.UIFramework
         // returns. The two _navigator.ChangeStateAsync calls below are sequential siblings, not
         // nested, so by the time the second one runs, _currentState is already correctly promoted
         // to LoadingState.
-        public async UniTask LoadSceneAndChangeStateAsync<TNext>(string sceneName, CancellationToken ct = default)
+        public async UniTask<NavigationResult> LoadSceneAndChangeStateAsync<TNext>(string sceneName, CancellationToken ct = default)
             where TNext : IGameState
         {
             if (_isTransitioning)
             {
                 Debug.LogWarning($"[GameLifecycleManager] Transitioning — LoadSceneAndChangeStateAsync<{typeof(TNext).Name}> ignored.");
-                return;
+                return NavigationResult.Rejected;
             }
             _isTransitioning = true;
             try
@@ -129,8 +134,17 @@ namespace Sinkii09.UIFramework
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _exitToken);
                 await ShowOverlaySafeAsync(cts.Token);
                 _loadingContext.Set(sceneName);
-                await _navigator.ChangeStateAsync<LoadingState>(cts.Token);
-                await _navigator.ChangeStateAsync<TNext>(cts.Token);
+                // If the scene-load step is refused, the second transition would run against the
+                // wrong state — report the refusal instead of continuing past it.
+                NavigationResult loading = await _navigator.ChangeStateAsync<LoadingState>(cts.Token);
+                if (loading != NavigationResult.Completed)
+                {
+                    // The scene was never loaded, so the pending target must not outlive this call —
+                    // a later LoadingState would otherwise read a scene name nobody asked for.
+                    _loadingContext.Reset();
+                    return loading;
+                }
+                return await _navigator.ChangeStateAsync<TNext>(cts.Token);
             }
             finally
             {
@@ -143,15 +157,21 @@ namespace Sinkii09.UIFramework
         // Use instead of ChangeStateAsync<T> when the game is already in T and needs a full reset
         // (e.g. Retry after game-over, Restart from pause), since the state machine's same-state
         // guard would otherwise silently reject the transition.
-        public async UniTask RestartCurrentStateAsync(CancellationToken ct = default)
+        public async UniTask<NavigationResult> RestartCurrentStateAsync(CancellationToken ct = default)
         {
             if (_isTransitioning)
             {
                 Debug.LogWarning("[GameLifecycleManager] Transitioning — RestartCurrentStateAsync ignored.");
-                return;
+                return NavigationResult.Rejected;
             }
             var current = _stateMachine.CurrentState;
-            if (current == null) return;
+            if (current == null)
+            {
+                // Previously refused in complete silence. Reachable before StartAsync has run, or
+                // after ResetState() — a Retry button wired up too early would simply do nothing.
+                Debug.LogWarning("[GameLifecycleManager] No current state — RestartCurrentStateAsync ignored.");
+                return NavigationResult.Rejected;
+            }
             _isTransitioning = true;
             try
             {
@@ -160,8 +180,22 @@ namespace Sinkii09.UIFramework
                 await current.OnExitAsync(cts.Token);
                 // Clear any views OnExitAsync left on the navigator stack. If OnExitAsync already
                 // called CloseAllAsync, this is a no-op (ClearAsync on empty stack exits immediately).
-                await _navigator.CloseAllAsync(cts.Token);
+                NavigationResult cleared = await _navigator.CloseAllAsync(cts.Token);
+                if (cleared != NavigationResult.Completed)
+                {
+                    // Deliberately NOT aborting, and deliberately NOT returning `cleared`.
+                    // OnExitAsync has already run: bailing out here would leave the state exited but
+                    // never re-entered — a worse, harder-to-diagnose condition than stale views. And
+                    // returning Rejected would misreport a restart that does in fact complete below.
+                    // A refusal here means something started navigation concurrently with the
+                    // restart, which is a caller bug, so it is an error rather than a warning.
+                    Debug.LogError(
+                        "[GameLifecycleManager] Stack clear was refused during RestartCurrentStateAsync — " +
+                        "the state is being re-entered on top of views that should have been closed. " +
+                        "Something navigated concurrently with the restart.");
+                }
                 await current.OnEnterAsync(cts.Token);
+                return NavigationResult.Completed;
             }
             finally
             {

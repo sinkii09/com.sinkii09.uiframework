@@ -19,13 +19,18 @@ namespace Sinkii09.UIFramework
             where TViewModel : class, IViewModel<TArgs>
             where TArgs : IViewArgs;
 
-        UniTask ShowAsync<T>(CancellationToken ct = default) where T : IUIView;
+        // Every navigation entry point reports whether it actually ran. A guard refuses requests
+        // that arrive mid-transition; before NavigationResult existed those refusals were
+        // indistinguishable from success to an awaiting caller. Awaiting and discarding the result
+        // is legal, so `await nav.ShowAsync<T>();` still compiles unchanged — but a caller that
+        // RETURNS the task directly from a `UniTask`-returning method must now await it instead.
+        UniTask<NavigationResult> ShowAsync<T>(CancellationToken ct = default) where T : IUIView;
         // C# cannot link TArgs to T's expected ViewModel args type — mismatched calls compile
         // but throw at runtime inside IUIViewFactory. UINavigator asserts T's ViewModel accepts TArgs.
-        UniTask ShowAsync<T, TArgs>(TArgs args, CancellationToken ct = default) where T : IUIView where TArgs : IViewArgs;
-        UniTask HideAsync<T>(CancellationToken ct = default) where T : IUIView;
-        UniTask PopAsync(CancellationToken ct = default);
-        UniTask CloseAllAsync(CancellationToken ct = default);
+        UniTask<NavigationResult> ShowAsync<T, TArgs>(TArgs args, CancellationToken ct = default) where T : IUIView where TArgs : IViewArgs;
+        UniTask<NavigationResult> HideAsync<T>(CancellationToken ct = default) where T : IUIView;
+        UniTask<NavigationResult> PopAsync(CancellationToken ct = default);
+        UniTask<NavigationResult> CloseAllAsync(CancellationToken ct = default);
         /// <summary>
         /// Clears the state machine's current state pointer.
         /// As of v1.2.0, the internal ChangeStateAsync no longer calls this automatically — doing so

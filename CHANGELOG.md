@@ -2,6 +2,52 @@
 
 ## [Unreleased]
 
+### Targeting 2.0.0 — BREAKING
+
+#### Changed
+- **Every guarded navigation entry point now returns `NavigationResult { Completed, Rejected }`**
+  instead of a bare `UniTask`. Affects `IUINavigator.ShowAsync` (both overloads), `HideAsync`,
+  `PopAsync`, `CloseAllAsync`, and `GameLifecycleManager.ChangeStateAsync`,
+  `LoadSceneAndChangeStateAsync`, `RestartCurrentStateAsync`.
+
+  Navigation guards drop requests that arrive while another transition is running, but returned a
+  `UniTask` that completed normally — so an awaiting caller could not distinguish "the view is on
+  screen" from "your request was discarded", and went on to update its own state as though the
+  navigation had happened. Two guards refused with **no log at all**: `HideAsync`'s transitioning
+  check and `RestartCurrentStateAsync`'s null-current-state check (reachable whenever a Retry button
+  is wired up before `StartAsync` — the symptom was a button that did nothing, silently).
+
+  `Rejected` also covers two refusals that are not guards and are easy to miss, because the call
+  looks like it succeeded: a push declined by `UIFrameworkConfig.MaxNavigationDepth`, and a pop on
+  an empty stack. Both previously reported success.
+
+#### Migration
+`await nav.ShowAsync<T>();` still compiles — awaiting and discarding a `UniTask<T>` is legal — and so
+does `.Forget()`. What breaks is **returning the task directly** from a `UniTask`-returning method:
+
+```csharp
+// before — no longer compiles: UniTask<NavigationResult> does not convert to UniTask
+public UniTask OnEnterAsync(CancellationToken ct = default)
+    => _navigator.ShowAsync<MyView>(ct);
+
+// after
+public async UniTask OnEnterAsync(CancellationToken ct = default)
+    => await _navigator.ShowAsync<MyView>(ct);
+```
+
+Implementers of `IUINavigator` also break, but there are normally none — the framework ships the
+only implementation.
+
+#### Notes
+- **Cancellation semantics are unchanged.** An operation cancelled in flight still throws
+  `OperationCanceledException`; there is deliberately no `Cancelled` member.
+- `GameLifecycleManager.StartAsync` keeps its `UniTask` signature (`IAsyncStartable` cannot return a
+  value) and logs a `Debug.LogError` if the boot transition is refused, rather than leaving the game
+  on an empty stack with only a warning.
+- `RestartCurrentStateAsync` logs an error but still reports `Completed` if its internal
+  `CloseAllAsync` is refused. Aborting there would be worse: `OnExitAsync` has already run, so
+  bailing out leaves the state exited but never re-entered.
+
 ## [1.9.0] - 2026-09-02
 
 Fail-fast view validation. Additive — no existing signature changed, no migration needed.

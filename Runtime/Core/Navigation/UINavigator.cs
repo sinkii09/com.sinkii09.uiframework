@@ -70,12 +70,12 @@ namespace Sinkii09.UIFramework
                 CreateViewWithArgsAsync<TView, TViewModel, TArgs>((TArgs)args, ct);
         }
 
-        public async UniTask ShowAsync<T>(CancellationToken ct = default) where T : IUIView
+        public async UniTask<NavigationResult> ShowAsync<T>(CancellationToken ct = default) where T : IUIView
         {
             if (_isTransitioning && !_stateTransitionActive)
             {
                 Debug.LogWarning($"[UINavigator] Transitioning — ShowAsync<{typeof(T).Name}> ignored.");
-                return;
+                return NavigationResult.Rejected;
             }
             // A tooltip belongs to the screen that raised it. Layer blocking only toggles
             // raycasters and never touches visibility, so without this the tooltip survives the
@@ -100,7 +100,15 @@ namespace Sinkii09.UIFramework
                 // `pending` refresh above is now describing a view that is not on the stack, so
                 // re-derive from the real top. Without this, blocking (and the backdrop, which is
                 // a full-screen raycast target) stays applied for a view nobody can see or close.
-                if (!ReferenceEquals(_stack.Peek(), view)) RefreshLayerBlocking();
+                if (!ReferenceEquals(_stack.Peek(), view))
+                {
+                    RefreshLayerBlocking();
+                    // Reporting Completed here would recreate the exact defect NavigationResult
+                    // exists to remove: the caller awaits, is told the view is up, and carries on
+                    // with nothing on screen. NavigationStack already logs why it declined.
+                    return NavigationResult.Rejected;
+                }
+                return NavigationResult.Completed;
             }
             catch
             {
@@ -110,14 +118,14 @@ namespace Sinkii09.UIFramework
             finally { if (ownsFlag) _isTransitioning = false; }
         }
 
-        public async UniTask ShowAsync<T, TArgs>(TArgs args, CancellationToken ct = default)
+        public async UniTask<NavigationResult> ShowAsync<T, TArgs>(TArgs args, CancellationToken ct = default)
             where T : IUIView
             where TArgs : IViewArgs
         {
             if (_isTransitioning && !_stateTransitionActive)
             {
                 Debug.LogWarning($"[UINavigator] Transitioning — ShowAsync<{typeof(T).Name}> with args ignored.");
-                return;
+                return NavigationResult.Rejected;
             }
             _tooltips?.HideImmediate();
             if (!_argsCreators.TryGetValue(typeof(T), out var creator))
@@ -134,8 +142,14 @@ namespace Sinkii09.UIFramework
                 await _stack.PushAsync(view, ct);
 
                 // See the no-args overload: a declined or failed push must not leave blocking and
-                // the backdrop pinned to a view that never made it onto the stack.
-                if (!ReferenceEquals(_stack.Peek(), view)) RefreshLayerBlocking();
+                // the backdrop pinned to a view that never made it onto the stack — nor report
+                // success for a view that is not there.
+                if (!ReferenceEquals(_stack.Peek(), view))
+                {
+                    RefreshLayerBlocking();
+                    return NavigationResult.Rejected;
+                }
+                return NavigationResult.Completed;
             }
             catch
             {
@@ -146,18 +160,27 @@ namespace Sinkii09.UIFramework
         }
 
         // Only hides if the top-of-stack view is T. Middle-of-stack removal is not supported.
-        public async UniTask HideAsync<T>(CancellationToken ct = default) where T : IUIView
+        public async UniTask<NavigationResult> HideAsync<T>(CancellationToken ct = default) where T : IUIView
         {
-            if (_isTransitioning) return;
+            if (_isTransitioning)
+            {
+                // Was the one guard here that refused in complete silence — no log, no return value.
+                Debug.LogWarning($"[UINavigator] Transitioning — HideAsync<{typeof(T).Name}> ignored.");
+                return NavigationResult.Rejected;
+            }
             var top = _stack.Peek();
             if (top is not T)
             {
                 Debug.LogWarning(
                     $"[UINavigator] HideAsync<{typeof(T).Name}>: top is '{top?.ViewId ?? "null"}'. Only top-of-stack hide is supported.");
-                return;
+                return NavigationResult.Rejected;
             }
             _isTransitioning = true;
-            try { await _stack.PopAsync(ct); }
+            try
+            {
+                await _stack.PopAsync(ct);
+                return NavigationResult.Completed;
+            }
             finally
             {
                 // Re-evaluate after pop — view is removed from stack at this point.
@@ -166,15 +189,22 @@ namespace Sinkii09.UIFramework
             }
         }
 
-        public async UniTask PopAsync(CancellationToken ct = default)
+        public async UniTask<NavigationResult> PopAsync(CancellationToken ct = default)
         {
             if (_isTransitioning)
             {
                 Debug.LogWarning("[UINavigator] Transitioning — PopAsync ignored.");
-                return;
+                return NavigationResult.Rejected;
             }
             _isTransitioning = true;
-            try { await _stack.PopAsync(ct); }
+            try
+            {
+                // Null means the stack was empty and nothing was popped (NavigationStack logs it).
+                // Same trap as a declined push: without this check an empty-stack pop reports
+                // Completed and the caller believes a view was dismissed.
+                IUIView popped = await _stack.PopAsync(ct);
+                return popped != null ? NavigationResult.Completed : NavigationResult.Rejected;
+            }
             finally
             {
                 RefreshLayerBlocking();
@@ -182,16 +212,20 @@ namespace Sinkii09.UIFramework
             }
         }
 
-        public async UniTask CloseAllAsync(CancellationToken ct = default)
+        public async UniTask<NavigationResult> CloseAllAsync(CancellationToken ct = default)
         {
             if (_isTransitioning)
             {
                 Debug.LogWarning("[UINavigator] Transitioning — CloseAllAsync ignored.");
-                return;
+                return NavigationResult.Rejected;
             }
             _tooltips?.HideImmediate();
             _isTransitioning = true;
-            try { await _stack.ClearAsync(ct); }
+            try
+            {
+                await _stack.ClearAsync(ct);
+                return NavigationResult.Completed;
+            }
             finally
             {
                 RefreshLayerBlocking();
@@ -204,12 +238,12 @@ namespace Sinkii09.UIFramework
         // Internal: GameLifecycleManager is the only sanctioned caller. Game code uses
         // GameLifecycleManager.ChangeStateAsync<T> / RestartCurrentStateAsync so the transition
         // overlay and the lifecycle re-entrancy guard are always applied.
-        internal async UniTask ChangeStateAsync<TState>(CancellationToken ct = default) where TState : IViewState
+        internal async UniTask<NavigationResult> ChangeStateAsync<TState>(CancellationToken ct = default) where TState : IViewState
         {
             if (_isTransitioning)
             {
                 Debug.LogWarning($"[UINavigator] Transitioning — ChangeStateAsync<{typeof(TState).Name}> ignored.");
-                return;
+                return NavigationResult.Rejected;
             }
             _tooltips?.HideImmediate();
             _isTransitioning = true;
@@ -227,6 +261,7 @@ namespace Sinkii09.UIFramework
                 // remains true — so IsTransitioning stays accurate for the full operation duration.
                 _stateTransitionActive = true;
                 await _stateMachine.ChangeStateAsync<TState>(ct);
+                return NavigationResult.Completed;
             }
             finally
             {
