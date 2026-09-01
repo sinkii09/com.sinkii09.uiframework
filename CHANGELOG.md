@@ -2,6 +2,53 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-02
+
+Navigation queue. Additive — no existing signature or behaviour changed, no migration needed.
+
+### Added
+- **`GameLifecycleManager.EnqueueStateChange<T>` / `EnqueueRestart` / `EnqueueSceneLoad<TNext>`** —
+  queued, fire-and-forget counterparts to the awaitable entry points. They run immediately if the
+  manager is idle, and otherwise after the in-flight transition finishes, instead of being refused.
+
+  v2.0.0 made refusal *visible*; this makes it *avoidable* for callers that cannot wait. The
+  awaitable methods still refuse while a transition is running — correct for a caller awaiting a
+  result — but that silently discarded code-driven navigation races: a win condition and a timeout
+  firing in the same frame, a collision or timer changing state mid-transition. Note this is not
+  primarily a button-spam fix: `TransitionOverlayView` blocks raycasts once its show animation
+  completes, so UI input cannot reach a button for most of a transition anyway.
+
+- **`NavigationRequestQueue`** — single-consumer FIFO, main-thread only. `GameLifecycleManager`
+  only; `UINavigator` is deliberately not a participant, because the manager calls into the
+  navigator and a shared queue would deadlock immediately.
+
+- **`GameLifecycleManager` now implements `IDisposable`.** VContainer disposes singleton entry
+  points, so scope teardown drops every pending request and cancels the one in flight.
+
+### Behaviour
+- Duplicate collapsing: a pending request with the same identity *and* the same
+  `CancellationToken` collapses into the existing one. Identity is (kind, target type, scene name),
+  so two scene loads of different scenes never collapse. Tokens must match too — keeping only the
+  older item would let its cancellation drop a second caller's still-live request. A caller minting
+  a fresh token source per call therefore never collapses.
+- Queue depth is capped at 8; over-cap requests are dropped with a warning.
+- A queued request that runs but does not report `Completed` logs a `Debug.LogError`.
+- A disposed `CancellationTokenSource` does **not** cancel a queued request — a disposed source's
+  token reads as never-cancelled. Cancel the token; do not merely dispose it.
+
+### Notes
+- **The `Enqueue*` methods return `void` deliberately, and that is the safety mechanism.** A queued
+  request runs after the current one, so a caller running *inside* the current one — a state's
+  `OnEnterAsync`, a view's `OnHideAsync` during the stack clear, a ViewModel teardown — would block
+  the queue forever if it could await its own request. That hazard cannot be detected: UniTask does
+  not flow `ExecutionContext`, so `AsyncLocal` cannot identify a request's causal chain, and every
+  flag wide enough to catch it is also wide enough to reject nearly every request. Returning `void`
+  removes the await handle, so the deadlock is not expressible through the API. It does not remove
+  the underlying dependency — waiting on a queued request's *observable effects* deadlocks equally.
+- `NavigationResult.Cancelled` is still deliberately absent. With a `void` API there is no result
+  channel, so the member would be unobservable.
+
+
 ## [2.0.0] - 2026-09-02
 
 Navigation reports refusal. **Breaking**: navigation entry points changed return type.
