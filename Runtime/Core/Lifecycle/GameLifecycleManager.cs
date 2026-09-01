@@ -10,14 +10,19 @@ namespace Sinkii09.UIFramework
     // Top-level game orchestrator. Registered as VContainer entry point (IAsyncStartable).
     // Framework registers BootState and LoadingState automatically.
     // Game developer registers game-specific states via RegisterState<T>() from an IInitializable bootstrap.
-    public sealed class GameLifecycleManager : IAsyncStartable
+    public sealed class GameLifecycleManager : IAsyncStartable, IDisposable
     {
         private readonly IUIStateMachine _stateMachine;
         private readonly UINavigator _navigator; // concrete: ChangeStateAsync is internal
         private readonly ITransitionOverlay _overlay;
         private readonly ILoadingContext _loadingContext;
         private readonly CancellationToken _exitToken;
+        private readonly NavigationRequestQueue _queue;
         private bool _isTransitioning;
+        // Gates the queue until boot owns the state machine. An IInitializable bootstrap runs
+        // BEFORE IAsyncStartable.StartAsync, so without this an enqueue from there would find the
+        // manager idle, drain immediately, and enter a state that BootState then clobbers.
+        private bool _hasStarted;
 
         [Inject]
         public GameLifecycleManager(
@@ -33,6 +38,11 @@ namespace Sinkii09.UIFramework
             _overlay = overlay;
             _loadingContext = loadingContext;
             _exitToken = Application.exitCancellationToken;
+            // A queued item must not run until every guard that could refuse it is clear: this
+            // manager's own, and the navigator's — game code calling navigator.ShowAsync/PopAsync
+            // directly holds the latter while this manager is perfectly idle.
+            _queue = new NavigationRequestQueue(
+                () => _hasStarted && !_isTransitioning && !_navigator.IsTransitioning, _exitToken);
             stateMachine.RegisterState(bootState);
             stateMachine.RegisterState(loadingState);
         }
@@ -72,6 +82,9 @@ namespace Sinkii09.UIFramework
 
         public async UniTask StartAsync(CancellationToken ct)
         {
+            // Both assignments are synchronous and adjacent, so a queued drain — which can only
+            // resume on a later player-loop tick — cannot observe "started but not transitioning".
+            _hasStarted = true;
             _isTransitioning = true;
             try
             {
@@ -203,5 +216,58 @@ namespace Sinkii09.UIFramework
                 _isTransitioning = false;
             }
         }
+
+        /// <summary>
+        /// Queued, fire-and-forget <see cref="ChangeStateAsync{T}"/>: runs now if idle, otherwise
+        /// after the in-flight transition finishes, instead of being refused outright.
+        ///
+        /// <para>Use this for navigation driven by code that cannot wait — a win condition and a
+        /// timeout racing in the same frame, a collision or timer changing state mid-transition.
+        /// Use <see cref="ChangeStateAsync{T}"/> when you need the result and know you are not
+        /// inside a transition.</para>
+        ///
+        /// <para>Returns <c>void</c> deliberately, and that is the safety mechanism rather than an
+        /// oversight: a queued request runs after the current one, so a caller running inside the
+        /// current one — a state's <c>OnEnterAsync</c>, a view's <c>OnHideAsync</c>, a ViewModel
+        /// teardown — would deadlock the queue if it could await its own request. Do not
+        /// reintroduce that by waiting on a queued request's observable effects either (e.g.
+        /// <c>await UniTask.WaitUntil(() =&gt; stateMachine.CurrentState is T)</c>).</para>
+        ///
+        /// <para><paramref name="ct"/> is read when the request comes up to run, which is after
+        /// this method returns. Disposing its source before then does NOT cancel the request — a
+        /// disposed source's token reads as never-cancelled — so cancel it, do not merely dispose
+        /// it, if the intent is to call the request off. Note also that minting a fresh token
+        /// source per call defeats duplicate collapsing.</para>
+        /// </summary>
+        public void EnqueueStateChange<T>(CancellationToken ct = default) where T : IGameState
+            => _queue.Enqueue(
+                new NavigationRequestQueue.Identity(NavigationRequestQueue.Kind.ChangeState, typeof(T)),
+                token => ChangeStateAsync<T>(token), ct);
+
+        /// <summary>
+        /// Queued, fire-and-forget <see cref="RestartCurrentStateAsync"/>. See
+        /// <see cref="EnqueueStateChange{T}"/> for the void rationale and the token lifetime rule.
+        /// </summary>
+        public void EnqueueRestart(CancellationToken ct = default)
+            => _queue.Enqueue(
+                new NavigationRequestQueue.Identity(NavigationRequestQueue.Kind.Restart),
+                token => RestartCurrentStateAsync(token), ct);
+
+        /// <summary>
+        /// Queued, fire-and-forget <see cref="LoadSceneAndChangeStateAsync{TNext}"/>. See
+        /// <see cref="EnqueueStateChange{T}"/> for the void rationale and the token lifetime rule.
+        /// Two queued loads of different scenes are kept separate even when TNext matches.
+        /// </summary>
+        public void EnqueueSceneLoad<TNext>(string sceneName, CancellationToken ct = default)
+            where TNext : IGameState
+            => _queue.Enqueue(
+                new NavigationRequestQueue.Identity(
+                    NavigationRequestQueue.Kind.LoadScene, typeof(TNext), sceneName),
+                token => LoadSceneAndChangeStateAsync<TNext>(sceneName, token), ct);
+
+        // VContainer disposes singleton entry points that implement IDisposable. Drops every
+        // queued request and stops the drain — nothing awaits a queued item, so nothing is
+        // stranded by discarding them.
+        public void Dispose() => _queue.Dispose();
     }
 }
