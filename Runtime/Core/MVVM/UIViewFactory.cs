@@ -299,6 +299,11 @@ namespace Sinkii09.UIFramework
                             $"[UIViewFactory] Prefab '{key}' root is {instance.GetType().Name}, not {viewType.Name}.");
                     }
                     ReparentToLayer(instance);
+
+                    // Backstop for UIViewBase.Awake's own call, which a derived view can silently
+                    // skip by overriding Awake without base.Awake(). This path cannot be overridden.
+                    // Editor/dev builds only, and deduped per view type, so it is free in practice.
+                    UIViewValidator.ValidateSerializedRefs(instance);
                 }
 
                 scope = (_scopeContainer ?? _container).CreateScope(builder =>

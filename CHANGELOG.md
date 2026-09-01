@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### Targeting 1.9.0 — additive
+
+#### Added
+- **`UIViewValidator`** — reports every unassigned `[SerializeField]` `UnityEngine.Object` reference
+  on a view in a single error naming the fields, with the view as the log context so clicking the
+  message pings it in the Hierarchy. Runs from `UIViewBase.Awake`. Previously a missing Inspector
+  reference surfaced as a `NullReferenceException` three frames later from inside a binding lambda,
+  where the stack trace points at framework code rather than at the prefab that is actually wrong.
+  Editor and development builds only: the call sites are stripped by `[Conditional]` and the body
+  plus all static state compile away in a release player.
+- **`[UIOptional]`** — exempts a serialized field where null is *meaningful* (an optional
+  transition, an icon some skins omit). Applied to `UIViewBase._showTransition`/`_hideTransition`.
+  A field that is merely "usually assigned" is not optional; leaving it unmarked is what makes the
+  report worth reading.
+
+#### Notes
+- Scope is deliberately narrow. Collections of references (`Image[]`, `List<Button>`) and nested
+  `[Serializable]` types are **not** inspected — an empty collection is usually legitimate, and
+  reporting it would train the reader to ignore the message. `readonly` fields are skipped too:
+  Unity never serializes them, so the Inspector could not fix one.
+- Destroyed objects are caught as well as nulls — the comparison uses Unity's overloaded `==`.
+- Reported **once per view type per session**, not once per instance.
+- `UIViewBase.Awake` is `protected virtual`, so a derived view that overrides it without calling
+  `base.Awake()` skips validation. `UIViewFactory` repeats the call on the creation path as a
+  backstop no override can bypass; scene-placed views (transition overlay, tooltips) rely on the
+  `Awake` call alone.
+
 ## [1.8.0] - 2026-09-01
 
 Async lifetime utilities. Three additive pieces sharing one theme: **async work started from UI

@@ -12,8 +12,10 @@ namespace Sinkii09.UIFramework
     public abstract class UIViewBase : MonoBehaviour, IUIView
     {
         // Null = instant show/hide (no animation). Assign ScriptableObject transitions in Inspector.
-        [SerializeField] private UITransition _showTransition;
-        [SerializeField] private UITransition _hideTransition;
+        // [UIOptional] because null is a documented, meaningful value here — without it every view
+        // that deliberately has no transition would be reported as misconfigured.
+        [SerializeField, UIOptional] private UITransition _showTransition;
+        [SerializeField, UIOptional] private UITransition _hideTransition;
 
         private IUIAnimator _animator;
 
@@ -29,6 +31,17 @@ namespace Sinkii09.UIFramework
         {
             CanvasGroup = GetComponent<CanvasGroup>();
             RectTransform = GetComponent<RectTransform>();
+
+            // Editor/development builds only — compiles away entirely in a release player.
+            // Runs here rather than in BindViewModel so the report names the offending prefab
+            // before any binding lambda can dereference the missing reference.
+            //
+            // This Awake is virtual, so a derived view that overrides it without calling
+            // base.Awake() skips validation. UIViewFactory therefore repeats the call on the
+            // creation path, which no override can bypass; the validator dedupes per type, so the
+            // second call costs nothing for well-behaved views. Scene-placed views that the factory
+            // never creates (the transition overlay, tooltips) are covered by this call alone.
+            UIViewValidator.ValidateSerializedRefs(this);
         }
 
         [Inject]
