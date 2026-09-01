@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
-### Targeting 1.9.0 — additive
+## [1.9.0] - 2026-09-02
 
-#### Added
+Fail-fast view validation. Additive — no existing signature changed, no migration needed.
+
+### Added
 - **`UIViewValidator`** — reports every unassigned `[SerializeField]` `UnityEngine.Object` reference
   on a view in a single error naming the fields, with the view as the log context so clicking the
   message pings it in the Hierarchy. Runs from `UIViewBase.Awake`. Previously a missing Inspector
@@ -17,7 +19,7 @@
   A field that is merely "usually assigned" is not optional; leaving it unmarked is what makes the
   report worth reading.
 
-#### Notes
+### Notes
 - Scope is deliberately narrow. Collections of references (`Image[]`, `List<Button>`) and nested
   `[Serializable]` types are **not** inspected — an empty collection is usually legitimate, and
   reporting it would train the reader to ignore the message. `readonly` fields are skipped too:
