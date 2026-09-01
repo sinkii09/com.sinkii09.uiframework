@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
-### Targeting 2.0.0 — BREAKING
+## [2.0.0] - 2026-09-02
 
-#### Changed
+Navigation reports refusal. **Breaking**: navigation entry points changed return type.
+
+### Changed
 - **Every guarded navigation entry point now returns `NavigationResult { Completed, Rejected }`**
   instead of a bare `UniTask`. Affects `IUINavigator.ShowAsync` (both overloads), `HideAsync`,
   `PopAsync`, `CloseAllAsync`, and `GameLifecycleManager.ChangeStateAsync`,
@@ -21,7 +23,7 @@
   looks like it succeeded: a push declined by `UIFrameworkConfig.MaxNavigationDepth`, and a pop on
   an empty stack. Both previously reported success.
 
-#### Migration
+### Migration
 `await nav.ShowAsync<T>();` still compiles — awaiting and discarding a `UniTask<T>` is legal — and so
 does `.Forget()`. What breaks is **returning the task directly** from a `UniTask`-returning method:
 
@@ -38,7 +40,7 @@ public async UniTask OnEnterAsync(CancellationToken ct = default)
 Implementers of `IUINavigator` also break, but there are normally none — the framework ships the
 only implementation.
 
-#### Notes
+### Notes
 - **Cancellation semantics are unchanged.** An operation cancelled in flight still throws
   `OperationCanceledException`; there is deliberately no `Cancelled` member.
 - `GameLifecycleManager.StartAsync` keeps its `UniTask` signature (`IAsyncStartable` cannot return a
