@@ -2,6 +2,56 @@
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-02
+
+Notification / toast service. Additive — no existing signature changed. **One migration step is
+required for existing projects**, see below.
+
+### Added
+- **`INotificationService`** (`Notify` / `Dismiss` / `DismissAll` / `ActiveCount`) with
+  `NotificationService` and a `NullNotificationService` fallback, registered the same way as the
+  tooltip service: the real one when a `NotificationHostView` exists in the scene, the Null-Object
+  otherwise. Registration is unconditional either way, because VContainer ignores C# optional
+  parameter defaults.
+- **Identity-keyed merging.** Requests sharing a `NotificationKey` (Category + Id) edit one toast
+  instead of stacking: quantity accumulates, the dismiss timer restarts, and priority rises to the
+  higher of the two but never falls. Five pickups of the same item show as one row.
+- **`NotificationPriority`** (`Normal` / `Important` / `Error`) ordering the waiting queue.
+- **`NotificationHostView`** + **`NotificationItemView`** — a resident, scene-owned host holding a
+  small reused set of rows. Like tooltips, these are deliberately not navigation views.
+- **`UILayer.Notification`**, between `Tooltip` and `Overlay`: above modals so a toast is not
+  occluded, below the loading curtain so it can never draw over a transition.
+- Config: `NotificationDurationSeconds` (4), `NotificationMaxLifetimeSeconds` (15),
+  `NotificationMaxVisible` (3), `NotificationFadeSeconds` (0.2).
+
+### Changed
+- **`UILayer` now has explicit, spaced values** (`HUD = 0, Screen = 100, Popup = 200,
+  Tooltip = 250, Notification = 275, Overlay = 300, Debug = 400`). Previously they were implicit
+  ordinals, so every insert renumbered everything after it — tolerable only because no `UILayer`
+  value is ever serialized. The spacing retires that hazard permanently. The numbers match each
+  layer's canvas sortOrder for readability; nothing reads `(int)UILayer` as a sortOrder.
+  *If a project persisted a `UILayer` ordinal anywhere outside this package, re-check it.*
+- `GameLifecycleManager` is unaffected; no navigation behaviour changed.
+
+### Migration — required for projects created before 2.2.0
+`UIRootLayerRefs` serialises by field name, so an existing UIRoot deserialises `Notification` as
+**null**, and layer wiring fails silently on a null transform. Run
+**`Tools/UIFramework/Upgrade UIRoot Layers`** once. Until then the service falls back to the
+`Overlay` layer and logs one error naming that command — toasts will work, but will draw over the
+loading curtain. Note the upgrader skips prefab **variants** and only scans **open** scenes.
+
+### Behaviour notes
+- Visibility is **sticky**: once a toast is on screen it holds its slot until it expires or is
+  dismissed. An arrival never displaces it, at any priority — priority decides which *waiting*
+  notification is promoted when a slot frees.
+- The dismiss timer runs only while a toast is visible, and pauses behind the loading curtain.
+  `NotificationMaxLifetimeSeconds` never pauses and is never reset by a merge: it is the guarantee
+  that an entry terminates, so a notification repeating faster than its duration stays dismissible.
+- The entry list is the source of truth and advances whether or not any view exists, so a destroyed
+  host or an un-migrated UIRoot degrades what is drawn, never whether the queue drains.
+- The host never takes raycasts. Toasts are display-only in this version — no click-to-dismiss.
+
+
 ## [2.1.0] - 2026-09-02
 
 Navigation queue. Additive — no existing signature or behaviour changed, no migration needed.
