@@ -2,6 +2,70 @@
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-09-02
+
+Frame-coalesced bindings and a render suspend switch. **Breaking**: two binding helpers change
+their default delivery timing. No signature changes — every existing call site still compiles.
+
+### Added
+- **`UIRenderScheduler`** — the UI's own frame clock, an R3 `FrameProvider` pumped from a single
+  work item on `UnityFrameProvider.PostLateUpdate`. Unity renders after that point, so a value
+  written during `Update` is still flushed and drawn in the same frame.
+- **`UIBindMode`** (`Coalesced` / `Immediate`) as an optional last parameter on every one-way
+  binding helper, so any default can be overridden per call site.
+- **`IUIRenderScheduler.Suspend()`** — refcounted, `IDisposable`-scoped suspension. While
+  suspended nothing is pumped and the scheduler's frame counter is frozen; on resume every
+  coalesced binding applies its newest value exactly once. Intended for a bulk simulation window
+  (offline catch-up, fast-forward). **Marked EXPERIMENTAL** — it ships with no in-tree consumer,
+  so its shape may change in a minor release.
+- **`IsSuspended` / `SuspendedFrames`**, so a game can implement its own liveness policy.
+- Config: `MaxSuspendedFrames` (600, ≈10s at 60fps; `0` disables).
+
+### Changed — BREAKING
+- **`BindToText` and `BindToFillAmount` now coalesce by default**: at most one write per rendered
+  frame, carrying the newest value. Intermediate values within a frame are dropped.
+  **Pass `UIBindMode.Immediate` to restore the previous behaviour.**
+- The **first** value of every binding still applies **synchronously**, so an async-created view
+  never displays a frame of unbound state. Only subsequent values coalesce.
+
+Every other binding stays immediate, following one rule — **display paths coalesce, input paths do
+not**:
+
+| Helper | Default | Why |
+|---|---|---|
+| `BindToText`, `BindToFillAmount` | Coalesced | pure display |
+| `BindToActive` | Immediate | a coalesced `SetActive(false)` leaves the object raycastable for the rest of the frame |
+| `BindToInteractable` | Immediate | a one-frame-late `interactable = false` leaves a button clickable |
+| `BindToAlpha` | Immediate | alpha is the property `DOTweenUIAnimator` animates; coalescing changes which writer wins |
+| `BindTo<TValue,TTarget>` | Immediate | the setter is arbitrary caller code, and coalescing drops intermediates |
+| `BindTwoWay` (both legs) | Immediate | its `text != v` guard evaluated at flush time would overwrite text the user typed that frame, and move the caret |
+
+### Migration
+Most projects need no changes. Two things to check:
+- **Set-then-read layout.** Reading `preferredWidth`, or driving `LayoutRebuilder` / a
+  content-size fitter immediately after a bound write, now sees stale geometry. Use
+  `UIBindMode.Immediate` there.
+- **Tests asserting synchronously after `.Value =`** keep working: the scheduler arrives via a
+  static hook set by `UIFrameworkLifetimeScope`, and **a null scheduler degrades to immediate**, so
+  tests that build a `ContainerBuilder` rather than a full scope see the pre-3.0.0 behaviour.
+
+### Behaviour notes
+- **Bindings are bounded under suspension; foreign R3 operators are not.** A coalesced binding
+  stores one pending value however many arrive. An operator registered on `Frames` keeps its own
+  semantics — `ObserveOn(Frames)` in particular buffers *every* value and drains them all on
+  resume, so a long suspension floods when it ends.
+- **The framework never calls `Suspend()` itself, deliberately.** It is not wired into scene loads
+  or transitions: the scene load runs inside `LoadingState` while that state's own view is on
+  screen, and the transition curtain may be `NullTransitionOverlay` (which draws nothing) or
+  semi-transparent, so the framework cannot know that suspending is safe. That call belongs to
+  game code.
+- A leaked `Suspend()` handle freezes the UI permanently. Exceeding `MaxSuspendedFrames` logs one
+  `Debug.LogError` per episode and **does not** force-resume — the framework cannot distinguish a
+  leak from a legitimately long catch-up.
+- `R3`'s `ThrottleFirstLastFrame` is deliberately **not** used: in R3 1.3.1 it emits `default(T)`
+  immediately after a legitimate value once a prior window has closed, which in a binding shows as
+  a score label flashing "0" or a fill bar snapping to empty.
+
 ## [2.2.0] - 2026-09-02
 
 Notification / toast service. Additive — no existing signature changed. **One migration step is
