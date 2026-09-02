@@ -36,6 +36,25 @@ namespace Sinkii09.UIFramework
         [Tooltip("Dim colour drawn behind views whose policy sets NeedsBackdrop.")]
         public Color BackdropColor = new Color(0f, 0f, 0f, 0.5f);
 
+        // --- Notification / toast ---------------------------------------------------------
+        // Consumed by NotificationService, which copies them into internal fields at construction
+        // so tests can zero them and drive the machine with explicit Tick() calls.
+
+        [Tooltip("Seconds a toast stays on screen. A merge into the same key restarts this.")]
+        public float NotificationDurationSeconds = 4f;
+
+        [Tooltip("Hard cap on a single toast's total life, measured from first appearance and " +
+                 "NOT restarted by merges. Without it a notification that repeats faster than " +
+                 "NotificationDurationSeconds would never be dismissible.")]
+        public float NotificationMaxLifetimeSeconds = 15f;
+
+        [Tooltip("How many toasts are visible at once. Further notifications wait for a free slot.")]
+        public int NotificationMaxVisible = 3;
+
+        [Tooltip("Fade in/out duration for a toast row. A slot is only reusable once its fade-out " +
+                 "completes, so this also paces how quickly a waiting toast is promoted.")]
+        public float NotificationFadeSeconds = 0.2f;
+
         // --- Tooltip timing ---------------------------------------------------------------
         // All four are consumed by TooltipService, which copies them into internal fields at
         // construction so tests can drive the state machine at zero delay. Every wait derived

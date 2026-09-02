@@ -15,6 +15,7 @@ namespace Sinkii09.UIFramework
         public Transform Screen;   // sortOrder: 100  (NavigationStack default parent)
         public Transform Popup;    // sortOrder: 200
         public Transform Tooltip;  // sortOrder: 250  (resident tooltip host; null on pre-v1.7 UIRoots)
+        public Transform Notification; // sortOrder: 275  (toast host; null on pre-v2.2 UIRoots)
         public Transform Overlay;  // sortOrder: 300  (LoadingView, fullscreen overlays)
         public Transform Debug;    // sortOrder: 400  (set inactive in release builds)
 
@@ -24,6 +25,7 @@ namespace Sinkii09.UIFramework
             UILayer.Screen  => Screen,
             UILayer.Popup   => Popup,
             UILayer.Tooltip => Tooltip,
+            UILayer.Notification => Notification,
             UILayer.Overlay => Overlay,
             UILayer.Debug   => Debug,
             _               => Screen,

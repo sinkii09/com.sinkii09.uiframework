@@ -304,8 +304,8 @@ namespace Sinkii09.UIFramework.Editor
             scaler.matchWidthOrHeight = 0.5f;
             // Keep in sync with UILayer's declaration order and with
             // UIFrameworkUIRootUpgrader.LayerSpecs, which is what actually wires these up.
-            string[] layerNames = { "HUD", "Screen", "Popup", "Tooltip", "Overlay", "Debug" };
-            int[] layerOrders = { 0, 100, 200, 250, 300, 400 };
+            string[] layerNames = { "HUD", "Screen", "Popup", "Tooltip", "Notification", "Overlay", "Debug" };
+            int[] layerOrders = { 0, 100, 200, 250, 275, 300, 400 };
             for (int i = 0; i < layerNames.Length; i++)
             {
                 var child = new GameObject(layerNames[i]);

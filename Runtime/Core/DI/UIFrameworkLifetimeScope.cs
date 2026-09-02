@@ -109,6 +109,15 @@ namespace Sinkii09.UIFramework
             else
                 builder.RegisterInstance<ITooltipService>(new NullTooltipService());
 
+            // Resident toast host — identical shape and identical reasoning to the tooltip block
+            // above. RegisterEntryPoint is required for the same reason: Initialize() discovers and
+            // injects the host, Tick() advances every notification timer AND every row fade, so a
+            // plain Register would leave toasts silently dead.
+            if (FindAnyObjectByType<NotificationHostView>(FindObjectsInactive.Include) != null)
+                builder.RegisterEntryPoint<NotificationService>(Lifetime.Singleton).AsSelf();
+            else
+                builder.RegisterInstance<INotificationService>(new NullNotificationService());
+
             // Scans assemblies for concrete UIView<T> subclasses; populates UIViewRegistry.Registrations.
             UIViewRegistry.AutoRegister();
             builder.RegisterInstance(UIViewRegistry.Registrations);

@@ -24,7 +24,7 @@ namespace Sinkii09.UIFramework.Editor
         private static readonly (string Name, int Order)[] LayerSpecs =
         {
             ("HUD", 0), ("Screen", 100), ("Popup", 200),
-            ("Tooltip", 250), ("Overlay", 300), ("Debug", 400),
+            ("Tooltip", 250), ("Notification", 275), ("Overlay", 300), ("Debug", 400),
         };
 
         [MenuItem("Tools/UIFramework/Upgrade UIRoot Layers")]
