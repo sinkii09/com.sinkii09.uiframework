@@ -17,6 +17,10 @@ namespace Sinkii09.UIFramework
     {
         private static UIFrameworkLifetimeScope _instance;
 
+        // Owned by this scope, not by the container: it is created in Configure (so it can be
+        // registered) but must be disposed and unhooked in OnDestroy.
+        private UIRenderScheduler _scheduler;
+
         [SerializeField] private UIFrameworkConfig _config;
         [SerializeField] private UIRootLayerRefs _layers;
 
@@ -42,6 +46,16 @@ namespace Sinkii09.UIFramework
 
         protected override void OnDestroy()
         {
+            // Cleared BEFORE the container is disposed. UIBindingExtensions.Scheduler is a static
+            // hook: leaving it set would hand every binding created after teardown a dead
+            // scheduler whose pump is no longer running, and they would simply never update.
+            // The identity check keeps a second scope from clearing the live one's hook.
+            if (_scheduler != null && ReferenceEquals(UIBindingExtensions.Scheduler, _scheduler))
+                UIBindingExtensions.Scheduler = null;
+
+            _scheduler?.Dispose();
+            _scheduler = null;
+
             base.OnDestroy();
             if (_instance == this) _instance = null;
         }
@@ -58,6 +72,18 @@ namespace Sinkii09.UIFramework
                 builder.RegisterInstance(_layers);
 
             RegisterLoader(builder, config);
+
+            // Frame clock for coalesced bindings. Registered unconditionally — VContainer ignores
+            // C# optional-parameter defaults, so a conditional registration would throw while
+            // constructing any consumer that takes one — AND published to the static hook on
+            // UIBindingExtensions, which cannot take a constructor dependency. OnDestroy clears
+            // both the hook and the instance.
+            // Disposed first on the off-chance Configure runs twice for one scope: otherwise the
+            // orphaned pump stays registered on PostLateUpdate for the rest of the session.
+            _scheduler?.Dispose();
+            _scheduler = new UIRenderScheduler(host: null, maxSuspendedFrames: config.MaxSuspendedFrames);
+            builder.RegisterInstance<IUIRenderScheduler>(_scheduler).AsSelf();
+            UIBindingExtensions.Scheduler = _scheduler;
 
             builder.Register<IUIAnimator, DOTweenUIAnimator>(Lifetime.Singleton);
             // .AsSelf() so the concrete type resolves to the SAME singleton — UIViewCacheSweeper

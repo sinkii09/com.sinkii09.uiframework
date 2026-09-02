@@ -6,6 +6,7 @@
         "UniTask",
         "R3.Unity",
         "VContainer",
+        "Unity.TextMeshPro",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

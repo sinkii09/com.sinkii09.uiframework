@@ -55,6 +55,15 @@ namespace Sinkii09.UIFramework
                  "completes, so this also paces how quickly a waiting toast is promoted.")]
         public float NotificationFadeSeconds = 0.2f;
 
+        // --- Render scheduling ------------------------------------------------------------
+
+        [Min(0)]
+        [Tooltip("Host frames a UI render suspension may last before one error is logged. A leaked " +
+                 "Suspend() handle freezes the UI permanently, so this exists to make that visible " +
+                 "— it never force-resumes, because the framework cannot tell a leak from a long " +
+                 "offline catch-up. 0 disables the check. Default 600 ~= 10s at 60fps.")]
+        public int MaxSuspendedFrames = UIRenderScheduler.DefaultMaxSuspendedFrames;
+
         // --- Tooltip timing ---------------------------------------------------------------
         // All four are consumed by TooltipService, which copies them into internal fields at
         // construction so tests can drive the state machine at zero delay. Every wait derived
