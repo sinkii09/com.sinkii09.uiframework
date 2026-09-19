@@ -7,7 +7,19 @@ using UnityEngine.ResourceManagement.AsyncOperations;
 
 namespace Sinkii09.UIFramework
 {
-    // Addressables loader — only compiled when the Addressables package is installed.
+    // Addressables loader. ALWAYS compiled — com.unity.addressables is a hard dependency in this
+    // package's package.json and a hard asmdef reference, so it is always present.
+    //
+    // This used to claim it was "only compiled when the Addressables package is installed", which
+    // stopped being true when 9178d58 removed the #if ADDRESSABLES guards on the reasoning that
+    // "the define is always set". That define was hand-set in each consuming project's
+    // ProjectSettings, never a guarantee the package could rely on, and it has since been deleted
+    // outright. What makes this safe is the package dependency, not a define — so do not
+    // reintroduce a hand-set symbol here. If Addressables ever needs to become optional, it has to
+    // be a versionDefines entry on com.unity.addressables, which Unity sets from actual package
+    // presence.
+    //
+    // The runtime switch between this and ResourcesUILoader is UIFrameworkConfig.LoaderMode.
     // Handles are cached per key and released explicitly via UnloadAsync.
     // Do NOT release handles on view return — release only on application quit or explicit eviction.
     public class AddressablesUILoader : IUILoader
