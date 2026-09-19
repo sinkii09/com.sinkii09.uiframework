@@ -148,8 +148,14 @@ namespace Sinkii09.UIFramework.Tests
         {
             // The per-key SemaphoreSlim must serialise these; neither may throw and the file must
             // end up holding one complete payload, never a mix.
+            //
+            // PINNED to thread-pool dispatch, and deliberately NOT mirrored into inline mode. Under
+            // inline dispatch the whole SaveAsync completes synchronously at the call site, so
+            // `first` is already finished before `second` is invoked and the semaphore is never
+            // contended: the test would pass while proving nothing. Without the explicit flag it
+            // would inherit the platform default and silently degrade to that in a WebGL player run.
             var key = NewKey("Concurrent");
-            var service = new JsonSaveService(new LocalFileStorageBackend());
+            var service = new JsonSaveService(new LocalFileStorageBackend(useThreadPool: true));
 
             var first = service.SaveAsync(key, new TestSaveData { Name = "first", Score = 1 });
             var second = service.SaveAsync(key, new TestSaveData { Name = "second", Score = 2 });

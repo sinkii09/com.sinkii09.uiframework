@@ -17,6 +17,11 @@ namespace Sinkii09.UIFramework.Tests
         internal Exception WriteError { get; set; }
         internal Exception ReadBackupError { get; set; }
 
+        // Runs once the backup has been read, which is the window between a successful recovery and
+        // the repair path re-reading the primary. Lets a test make a racing save or delete happen
+        // deterministically instead of hoping for a timing coincidence.
+        internal Action OnReadBackup { get; set; }
+
         internal void SeedPrimary(string key, string json) => _primary[key] = json;
         internal void SeedBackup(string key, string json) => _backup[key] = json;
         internal string PeekPrimary(string key) => _primary.TryGetValue(key, out var v) ? v : null;
@@ -44,7 +49,12 @@ namespace Sinkii09.UIFramework.Tests
             if (ReadBackupError != null)
                 throw ReadBackupError;
 
-            return UniTask.FromResult(_backup.TryGetValue(key, out var v) ? v : null);
+            // Captured BEFORE the hook runs. The window being simulated is "the backup has been read,
+            // the repair path has not re-read the primary yet" — firing first would instead delete the
+            // backup out from under the recovery and test nothing.
+            var value = _backup.TryGetValue(key, out var v) ? v : null;
+            OnReadBackup?.Invoke();
+            return UniTask.FromResult(value);
         }
 
         public UniTask<bool> ExistsAsync(string key, CancellationToken ct = default)

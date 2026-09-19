@@ -11,15 +11,34 @@ namespace Sinkii09.UIFramework
         private readonly Subject<SaveEventArgs> _started = new();
         private readonly Subject<SaveEventArgs> _completed = new();
         private readonly Subject<SaveEventArgs> _failed = new();
+        private readonly Subject<SaveRecoveredEventArgs> _recovered = new();
         private volatile bool _disposed;
 
         internal Observable<SaveEventArgs> Started => _started;
         internal Observable<SaveEventArgs> Completed => _completed;
         internal Observable<SaveEventArgs> Failed => _failed;
+        internal Observable<SaveRecoveredEventArgs> Recovered => _recovered;
 
         internal void RaiseStarted(string key) => Publish(_started, key, null);
         internal void RaiseCompleted(string key) => Publish(_completed, key, null);
         internal void RaiseFailed(string key, Exception error) => Publish(_failed, key, error);
+
+        // Deliberately NOT routed through Started/Completed. A "Saving…" indicator lighting up in
+        // the middle of a LOAD would be a lie, and recovery is a load-time event.
+        internal void RaiseRecovered(string key, bool primaryRepaired)
+        {
+            if (_disposed)
+                return;
+
+            try
+            {
+                _recovered.OnNext(new SaveRecoveredEventArgs(key, primaryRepaired));
+            }
+            catch (ObjectDisposedException) when (_disposed)
+            {
+                // Same teardown race as Publish below, same reasoning for the filter.
+            }
+        }
 
         // After Dispose, R3's Subject.OnNext throws ObjectDisposedException — and an in-flight save
         // would then throw a SECOND time from inside its own catch block, masking the real error.
@@ -56,6 +75,7 @@ namespace Sinkii09.UIFramework
             _started.Dispose();
             _completed.Dispose();
             _failed.Dispose();
+            _recovered.Dispose();
         }
     }
 }

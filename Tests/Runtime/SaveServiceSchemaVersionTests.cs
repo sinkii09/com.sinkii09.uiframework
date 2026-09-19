@@ -23,7 +23,11 @@ namespace Sinkii09.UIFramework.Tests
             backend.SeedPrimary(Key, Envelope(Sample(), SaveEnvelopeCodec.CurrentSchemaVersion - 1));
             var service = new JsonSaveService(backend);
 
-            LogAssert.Expect(LogType.Warning, new Regex("no migration engine"));
+            // Pinned on a stable substring, not on the prose. The message used to say "there is no
+            // migration engine", which stopped being true once one existed; what still holds — and
+            // what this test is actually about — is that an older save with no applicable migration
+            // warns and loads anyway rather than failing.
+            LogAssert.Expect(LogType.Warning, new Regex("loading as-is"));
             Assert.AreEqual(42, (await service.LoadAsync<TestSaveData>(Key)).Score);
         });
 

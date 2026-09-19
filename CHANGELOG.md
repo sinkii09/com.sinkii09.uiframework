@@ -2,6 +2,67 @@
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-09-19
+
+Persistence redesign. The save system **did not work on WebGL at all** — and failed in the worst
+possible way, hanging forever with no exception — so this makes it work there, adds the migration
+engine and slots both prior sprints deferred, and fixes a pre-existing bug where recovering from a
+backup destroyed the last good copy on the very next save.
+
+Additive: no interface member was added, migration semantics are backward compatible, and no external
+implementation breaks.
+
+### Fixed
+- **WebGL saves hung forever.** `UniTask.RunOnThreadPool` never resumes there — it does not throw, it
+  simply never completes. All six I/O paths in `LocalFileStorageBackend` now dispatch through a
+  private helper that runs inline on WebGL. Measured on a real build: `File.Replace`, `File.Move` and
+  `Directory.GetFiles` all work on IDBFS, on Chromium and iOS Safari alike, so there is no second
+  backend — threading was the only thing broken.
+- **Recovering from a backup threw away the lifeline.** After a successful recovery the primary was
+  still corrupt, and the next ordinary save rotated it into the backup slot, destroying the last good
+  copy. Recovery now writes the recovered bytes back over the primary, guarded against a racing save
+  (re-read and compare) and a racing delete (absence means skip, never resurrect).
+- **A transient storage failure was treated as corruption** by the reference consumer, which reset
+  progress and re-enabled saving — overwriting an intact but momentarily unreadable save.
+
+### Added
+- **Per-key schema versions and a migration engine.** `ISaveMigration` + `SaveMigrationRegistry`,
+  registered per save key during container configuration. Chains run read-only at load time and are
+  never written back mid-chain, so a chain that fails halfway cannot corrupt the file.
+  The current version is **derived from the chain**, never declared: a single global version stamped
+  unconditionally meant one game bumping it would stamp the new number onto every other game's
+  unchanged data.
+- `SaveMigrationException`, excluded from ordinary backup recovery for the same reason
+  `SaveSchemaVersionException` is — a failed chain means the code is wrong, not the data.
+- **First-class save slots.** `ISaveSlotContext` decorates the storage key (`{key}` for slot 0,
+  `{key}.s{n}` beyond), so the *generic* overloads honour slots too — they resolve their key inside
+  the service, where no wrapper could ever have reached them. Slot 0 is the undecorated key, so every
+  existing save is slot 0 and loads unchanged.
+- `JsonSaveService.OnSaveRecoveredAsObservable`, reporting whether the damaged primary was repaired.
+  On the concrete class rather than `ISaveService`: adding an interface member breaks implementers and
+  would have forced a major version.
+
+### Changed
+- `IStorageBackend.WriteAsync`'s contract now states its durability guarantee explicitly, including
+  the WebGL residual: the bytes reach IDBFS, but the engine-owned flush to IndexedDB is asynchronous
+  and **no C# API can await it**. Measured survival of a forced browser kill and a session boundary;
+  write-then-close-tab-within-a-second remains unproven.
+- `JsonSaveService` split — `SaveKeyResolver` (key rules) and `SaveBackupRecovery` (recovery policy).
+
+### Deliberately not built
+- **`FlushAsync`.** Both implementations would be no-ops once `WriteAsync` is durable, it would have
+  had zero callers, and it alone would have forced a major version. Worse, its presence tells the next
+  backend author "`WriteAsync` may buffer" — the exact inference the tightened contract forbids. It is
+  the recorded extension point for a future batching backend.
+- **A separate WebGL storage backend, and a `RegisterPersistence` DI hook.** Measurement killed the
+  first; VContainer's last-wins registration already provides the second.
+- **An autosave scheduler / debounce policy.** Saves are already write-through, so the plan's policy
+  amounted to adding a debounce nobody asked for and then a switch to disable it on WebGL.
+- **A `.jslib` wrapper over `FS.syncfs`** to close the IDBFS flush window. Named as a future extension
+  point; unbuilt because nothing needs it yet. Do not build on `JS_FileSystem_Sync()` — Unity has
+  deprecated it.
+
+
 ## [3.1.0] - 2026-09-19
 
 Generate a View's `[SerializeField]` declarations from its prefab. Editor-only and additive —
