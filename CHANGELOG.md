@@ -2,6 +2,50 @@
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-09-19
+
+Generate a View's `[SerializeField]` declarations from its prefab. Editor-only and additive —
+no `Runtime/` file changed, and every existing View still compiles untouched.
+
+### Added
+- **Prefab → View binding codegen** in `Tools/UIFramework/Create View + ViewModel`. Point it at a
+  prefab, tick the `(child, component)` pairs to bind, and it writes `{View}.Bindings.g.cs`: a
+  regenerable partial holding only the field declarations. `{View}.cs` is never touched.
+- **Candidate checklist** with a component-priority table deciding what is default-ticked (framework
+  controls > TMP > selectables > graphics), a **Show all components** escape hatch, and a
+  **Descend into nested prefabs** toggle (off by default — a field generated from inside another
+  prefab breaks silently when that prefab changes).
+- **Manifest header** (`field | childPath | type` + the prefab GUID) carried in the generated file.
+  It restores the previous selection on the next scan, and it is the **authority on field names**:
+  a name once emitted for a `(childPath, type)` pair is never reallocated to anything else.
+- `BindingManifest.PairKey` — the single definition of a binding's identity, pipe-escaped so a
+  GameObject named `a | b` cannot alias onto another binding.
+
+### Changed
+- `UIViewTemplate.txt` now emits `public partial class`, so new Views can host a generated partial.
+  **Existing Views need `partial` added by hand** before the generator will write for them; it
+  refuses rather than editing your file, and names the exact edit.
+
+### Guards
+- Refuses unless exactly one `{View}.cs` exists and declares `partial class {View}`.
+- Refuses to overwrite a `.g.cs` that does not carry the generator's marker. The marker is matched by
+  prefix, so a future format bump cannot orphan files written by this version.
+- Output lands next to the **located** `{View}.cs`, never the wizard's folder field — a partial split
+  across two assemblies does not compile.
+- Rejects `..`, rooted and UNC paths, anything outside `Assets/` or `Packages/`, names that are not
+  legal C# identifiers, and C# keywords.
+- File-system errors surface as a message in the wizard instead of an exception out of `OnGUI`.
+- A manifest describing a different prefab is surfaced as a warning rather than silently ignored.
+- Refuses if two selected children resolve to the same field name — sibling GameObjects may share a
+  name, and two identical declarations would make the generated file itself fail to compile.
+
+### Notes
+- The generator **declares** fields; assigning them in the Inspector is still manual by design.
+- Renaming a bound child changes its path, so that one binding gets a fresh field name and loses its
+  assignment. Every other binding keeps its name and its wiring.
+- Emission is deterministic with explicit `\n`, so regenerating an unchanged prefab produces a
+  byte-identical file and no diff.
+
 ## [3.0.0] - 2026-09-02
 
 Frame-coalesced bindings and a render suspend switch. **Breaking**: two binding helpers change
