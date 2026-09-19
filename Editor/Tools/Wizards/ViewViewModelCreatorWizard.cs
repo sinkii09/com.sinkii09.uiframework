@@ -11,6 +11,8 @@ namespace Sinkii09.UIFramework.Editor
         private string _namespace = "Game.UI";
         private string _outputFolder = "Assets/UIFramework/Views";
 
+        private readonly PrefabBindingSection _bindings = new();
+
         private void OnGUI()
         {
             GUILayout.Label("Create View + ViewModel", EditorStyles.boldLabel);
@@ -28,10 +30,22 @@ namespace Sinkii09.UIFramework.Editor
 
             if (GUILayout.Button("Create"))
                 Generate(_viewName, vmName, _namespace, _outputFolder);
+
+            // Second half of the window: fill an existing partial View with [SerializeField]
+            // declarations read off a prefab. Deliberately not a separate EditorWindow — this
+            // package already carries two divergent installer wizards.
+            _bindings.Draw(_viewName);
         }
 
         private static void Generate(string viewName, string vmName, string ns, string folder)
         {
+            var invalid = PrefabBindingGenerator.ValidateTarget(viewName, folder);
+            if (invalid != null)
+            {
+                EditorUtility.DisplayDialog("Invalid target", invalid, "OK");
+                return;
+            }
+
             // Check both target paths before writing either — avoids a partial-overwrite where
             // the View gets regenerated, the user then cancels on the ViewModel, and the pair
             // ends up inconsistent (one new, one stale).

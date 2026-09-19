@@ -2,7 +2,8 @@ using Sinkii09.UIFramework;
 
 namespace {NAMESPACE}
 {
-    public class {VIEW_NAME} : UIView<{VIEWMODEL_NAME}>
+    // partial so the wizard can drop a generated "{VIEW_NAME}.Bindings.g.cs" alongside this file.
+    public partial class {VIEW_NAME} : UIView<{VIEWMODEL_NAME}>
     {
         protected override void BindViewModel({VIEWMODEL_NAME} vm)
         {
