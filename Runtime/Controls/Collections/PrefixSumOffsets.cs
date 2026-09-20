@@ -19,6 +19,9 @@ namespace Sinkii09.UIFramework
         public float TotalSize { get; }
         public float MinStride { get; }
 
+        /// <summary>One item per stride: this is a list, not a grid.</summary>
+        public int ItemsPerStride => 1;
+
         /// <summary>
         /// Builds the table by asking <paramref name="sizeProvider"/> for every index.
         ///

@@ -31,11 +31,20 @@ namespace Sinkii09.UIFramework
         public readonly float TailSize;
         public readonly int TailCreatedTick;
 
+        /// <summary>
+        /// Items sharing one offset — 1 for a list, the column count for a grid. Optional so every
+        /// existing caller and test reads unchanged, and so the list case is literally the old
+        /// behaviour rather than a special case of a new one.
+        /// </summary>
+        public readonly int ItemsPerStride;
+
         public WindowState(
             float viewportStart, float viewportSize, int itemCount, int shownCount, int tick,
             int headIndex, float headOffset, float headSize, int headCreatedTick,
-            int tailIndex, float tailOffset, float tailSize, int tailCreatedTick)
+            int tailIndex, float tailOffset, float tailSize, int tailCreatedTick,
+            int itemsPerStride = 1)
         {
+            ItemsPerStride = itemsPerStride < 1 ? 1 : itemsPerStride;
             ViewportStart = viewportStart;
             ViewportSize = viewportSize;
             ItemCount = itemCount;
@@ -77,15 +86,22 @@ namespace Sinkii09.UIFramework
         public const int MinIterations = 16;
 
         /// <summary>
+        /// Single-item-per-stride overload — a plain list. Kept so every existing caller and test
+        /// reads unchanged; it is the <c>itemsPerStride: 1</c> case and nothing more.
+        /// </summary>
+        public static int MaxIterationsFor(float viewportSize, float createDistance, float minStride, int itemCount)
+            => MaxIterationsFor(viewportSize, createDistance, minStride, itemCount, 1);
+
+        /// <summary>
         /// Safety cap on pump iterations for one tick, derived from the geometry rather than fixed.
         ///
         /// <para><b>Why this cannot be a constant.</b> A reseed leaves a single cell and the window
         /// then grows one cell per iteration, so the work to converge scales with how many cells fit
         /// in the viewport plus a create band at each end. A constant that suits 100px rows on a
         /// 500px viewport is exceeded outright by 30px rows on a 1920px one — and being exceeded is
-        /// not benign: the pump logs an error and abandons the tick, leaving the list permanently
-        /// short of cells. A fixed cap only looks safe because the number it was chosen against was
-        /// never written down.</para>
+        /// not benign: the pump logs an error and abandons the tick, so the list spends frames, and
+        /// an error apiece, catching up. A fixed cap only looks safe because the number it was
+        /// chosen against was never written down.</para>
         ///
         /// <para>Doubling covers the mirror case, where a window arrives oversized and must recycle
         /// about as many cells as it creates before it settles.</para>
@@ -96,14 +112,28 @@ namespace Sinkii09.UIFramework
         /// a bound that is usually generous and occasionally, silently, short: the same defect as the
         /// fixed cap this replaced. It is a <i>stride</i>, spacing included, because that is what an
         /// iteration actually advances.</para>
+        ///
+        /// <para><paramref name="itemsPerStride"/> is what makes it correct for a grid: a stride is
+        /// one ROW, but the pump still realises one CELL per iteration, so a span covering
+        /// <c>k</c> rows costs up to <c>k * columns</c> iterations.</para>
+        ///
+        /// <para><b>The order of the three steps is load-bearing.</b> Multiply by
+        /// <paramref name="itemsPerStride"/> first, clamp to the item count second, double last.
+        /// Clamping the stride count before multiplying budgets against a number that was already
+        /// capped.</para>
         /// </summary>
-        public static int MaxIterationsFor(float viewportSize, float createDistance, float minStride, int itemCount)
+        public static int MaxIterationsFor(
+            float viewportSize, float createDistance, float minStride, int itemCount, int itemsPerStride)
         {
             if (minStride <= 0f || itemCount <= 0) return MinIterations;
+            if (itemsPerStride < 1) itemsPerStride = 1;
 
             double span = viewportSize + 2d * createDistance;
-            // +2 for the partial cells the span's two edges can straddle.
-            double cells = Math.Ceiling(span / minStride) + 2d;
+            // +2 for the partial strides the span's two edges can straddle.
+            double strides = Math.Ceiling(span / minStride) + 2d;
+
+            // Cells, not strides: one iteration realises one cell.
+            double cells = strides * itemsPerStride;
 
             // Never budget for more cells than the list actually has.
             if (cells > itemCount + 1) cells = itemCount + 1;
@@ -136,11 +166,30 @@ namespace Sinkii09.UIFramework
             if (state.HeadIndex > 0 && state.HeadOffset > createBefore)
                 return WindowAction.CreateBeforeHead;
 
-            if (state.TailIndex < state.ItemCount - 1 && state.TailEnd < createAfter)
+            // `|| !EndsAStride` completes a partial row. Every item in a row shares one offset, so
+            // TailEnd reaches the create band the moment the row's FIRST cell exists — and without
+            // this the rest of that row is never realised. With the default create distance the
+            // stranded row sits beyond the viewport and nobody sees it, but nothing requires the
+            // create distance to exceed a row's height: at createDistance 50 with 100px rows, that
+            // row is on screen showing one cell out of the column count.
+            //
+            // It cannot oscillate against the recycle branch above. Recycling is decided first and
+            // drains a whole row before the tail reaches the previous one, which then ends a stride.
+            if (state.TailIndex < state.ItemCount - 1
+                && (state.TailEnd < createAfter || !EndsAStride(state.TailIndex, state.ItemsPerStride)))
+            {
                 return WindowAction.CreateAfterTail;
+            }
 
             return WindowAction.None;
         }
+
+        /// <summary>
+        /// True when <paramref name="index"/> is the last item of its row. Always true for a list,
+        /// which is what keeps the single-column decision identical to what it always was.
+        /// </summary>
+        private static bool EndsAStride(int index, int itemsPerStride)
+            => itemsPerStride <= 1 || (index + 1) % itemsPerStride == 0;
 
         /// <summary>
         /// True when the shown window has drifted entirely outside the recycle bands — the result of

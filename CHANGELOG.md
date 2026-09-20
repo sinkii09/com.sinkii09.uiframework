@@ -2,6 +2,48 @@
 
 ## [Unreleased]
 
+### Added
+- **Multi-column grids in `RecyclerView`** — `SetCrossAxisCount(n)`, or `Cross Axis Count` on the
+  settings block. `1` is the default and a view left there behaves exactly as it did before: the
+  single-column path takes the identical calls with the identical arguments, a branch rather than a
+  generalisation.
+
+  The API does not otherwise change. Cells stay **1:1 with item indices**, the provider contract is
+  untouched, and `ShownIndices` is still one contiguous ascending run — a grid is the same list
+  folded, with item `i` at row `i / n`, column `i % n`.
+
+  Built as **flat index + derived column**, not as rows-as-the-recycled-unit. Row-grouping is the
+  usual way to bolt a grid onto a 1-D scroller, and it would have broken five public contracts at
+  once — `RentCell`'s one-cell-per-bind rule, `cell.Index`, `CellPool.Recycle`, `ShownIndices` and
+  `RefreshIndex` — while making a runtime column change a full re-bucketing rather than a relayout.
+  `GridOffsets` therefore **wraps** a table built over rows, owning nothing but the index
+  arithmetic, so every offset, size and binary search is code that was already proven.
+
+  Columns are **fractional anchors**, not widths: there is no viewport-resize hook in this control,
+  so anchors let a width change re-lay the columns out with no code at all. `CrossSpacing` insets
+  each cell — a full gap between columns, half of one outside the first and last.
+
+  With a size provider installed, a row's height is the **tallest item in that row**. The provider
+  stays per-item in both modes, so a caller never has to know whether the view is currently a grid;
+  at one column it is passed through untouched rather than wrapped.
+
+### Fixed
+- **`RecycleWindow.MaxIterationsFor` now counts cells, not strides.** A stride is one row while the
+  pump realises one cell per iteration, so a grid's budget was short by exactly the column count and
+  the pump logged an error and abandoned the tick, taking several frames and an error apiece to fill
+  a window it should have filled in one. The new `itemsPerStride` argument comes from the offset
+  table rather than the caller, because the table is what knows the packing. The four-argument
+  overload remains and is the `itemsPerStride: 1` case.
+- **The trailing row is realised in full.** Every item in a row shares one offset, so the create band
+  was satisfied by that row's first cell and the rest of the row was never created. Invisible at the
+  default create distance, where the stranded row sits below the viewport — on screen as soon as
+  `CreateDistance < CellSize`.
+- **`IItemOffsets.IndexAt` is documented as the FIRST index of its stride**, not the greatest index
+  at or before the offset. The two coincide for a list and differ in a grid, where the greatest is
+  the row's *last* item; reseeding from there would strand the rest of the row, because the pump only
+  grows its window outward from the anchor.
+
+
 ## [3.3.0] - 2026-09-20
 
 The data foundation: nothing in a consuming game could survive being backgrounded, a damaged save

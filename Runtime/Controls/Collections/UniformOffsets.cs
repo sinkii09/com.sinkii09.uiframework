@@ -40,6 +40,9 @@ namespace Sinkii09.UIFramework
 
         public float MinStride => _count <= 0 ? 0f : Stride;
 
+        /// <summary>One item per stride: this is a list, not a grid.</summary>
+        public int ItemsPerStride => 1;
+
         // Was: index * _settings.Stride
         public float OffsetOf(int index) => index * Stride;
 

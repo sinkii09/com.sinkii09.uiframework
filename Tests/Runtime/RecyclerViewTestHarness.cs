@@ -45,7 +45,9 @@ namespace Sinkii09.UIFramework.Tests
             float spacing = 0f,
             ScrollDirection direction = ScrollDirection.TopToBottom,
             int prewarmCount = 0,
-            int prefabCount = 1)
+            int prefabCount = 1,
+            int crossAxisCount = 1,
+            float crossSpacing = 0f)
         {
             var harness = new RecyclerViewHarness();
 
@@ -78,7 +80,8 @@ namespace Sinkii09.UIFramework.Tests
             harness.View = harness.Root.AddComponent<RecyclerView>();
             SetField(harness.View, "_direction", direction);
             SetField(harness.View, "_cellPrefabs", prefabs);
-            SetField(harness.View, "_settings", NewSettings(cellSize, spacing, prewarmCount));
+            SetField(harness.View, "_settings",
+                NewSettings(cellSize, spacing, prewarmCount, crossAxisCount, crossSpacing));
 
             harness.Root.SetActive(true); // Awake -> OnInitialize
             return harness;
@@ -103,6 +106,38 @@ namespace Sinkii09.UIFramework.Tests
 
         /// <summary>Content rect's own extent along the scroll axis.</summary>
         public float ContentSize => ScrollAxis.From(Direction).SizeOf(Content.rect);
+
+        /// <summary>The live cell bound to a data index, or <c>null</c>. Reads the scene, not bookkeeping.</summary>
+        public RectTransform RectOf(int index)
+        {
+            foreach (TestCell cell in Content.GetComponentsInChildren<TestCell>())
+            {
+                if (cell.Index == index) return (RectTransform)cell.transform;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Where a cell sits ACROSS the scroll axis, in the content's own space. This is the number
+        /// columns are supposed to differ in, and the one a pooled cell carrying stale anchors gets
+        /// wrong.
+        /// </summary>
+        public float CellCrossCentreOf(int index)
+        {
+            RectTransform rect = RectOf(index);
+            if (rect == null) return float.NaN;
+
+            ScrollAxis axis = ScrollAxis.From(Direction);
+            Vector3 centre = rect.localPosition;
+            return axis.Horizontal ? centre.y : centre.x;
+        }
+
+        /// <summary>A cell's extent across the scroll axis — its column width.</summary>
+        public float CellCrossSizeOf(int index)
+        {
+            RectTransform rect = RectOf(index);
+            return rect == null ? float.NaN : ScrollAxis.From(Direction).CrossSizeOf(rect.rect);
+        }
 
         /// <summary>Installs the standard provider: rent prefab 0, record the index, hand it back.</summary>
         public void UseDefaultProvider()
@@ -163,12 +198,15 @@ namespace Sinkii09.UIFramework.Tests
             return rect;
         }
 
-        private static RecyclerViewSettings NewSettings(float cellSize, float spacing, int prewarmCount)
+        private static RecyclerViewSettings NewSettings(
+            float cellSize, float spacing, int prewarmCount, int crossAxisCount, float crossSpacing)
         {
             var settings = new RecyclerViewSettings();
             SetField(settings, "_cellSize", cellSize);
             SetField(settings, "_spacing", spacing);
             SetField(settings, "_prewarmCount", prewarmCount);
+            SetField(settings, "_crossAxisCount", crossAxisCount);
+            SetField(settings, "_crossSpacing", crossSpacing);
             return settings;
         }
 

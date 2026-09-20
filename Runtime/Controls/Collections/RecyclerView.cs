@@ -63,6 +63,16 @@ namespace Sinkii09.UIFramework
         /// <summary>Data indices currently realised as live cells, ascending.</summary>
         public IReadOnlyList<int> ShownIndices => _shownIndices;
 
+        /// <summary>
+        /// Cells per row across the scroll axis. <c>1</c> is a plain list and is the default.
+        ///
+        /// <para>Items fill a row before starting the next, so item <c>i</c> sits at row
+        /// <c>i / CrossAxisCount</c>, column <c>i % CrossAxisCount</c>. Indices, the provider
+        /// contract and <see cref="ShownIndices"/> are unchanged by the column count — a grid is
+        /// still one list of items, only folded.</para>
+        /// </summary>
+        public int CrossAxisCount => _settings.CrossAxisCount;
+
         protected override void OnInitialize()
         {
             _settings.Validate();
@@ -143,13 +153,46 @@ namespace Sinkii09.UIFramework
             // it means a provider that throws is still installed afterwards, so every later
             // SetItemCount re-invokes it and throws too — the view never recovers. Preserving
             // _offsets is not enough on its own.
-            IItemOffsets rebuilt = BuildOffsets(sizeProvider);
+            IItemOffsets rebuilt = BuildOffsets(sizeProvider, _settings.CrossAxisCount);
 
             _sizeProvider = sizeProvider;
             _offsets = rebuilt;
 
             // Not just Pump(): the content rect and every live cell's cached offset are computed
             // from the old sizes, and Pump() re-reads neither.
+            ReleaseAllShown();
+            ApplyContentSize();
+            Pump();
+        }
+
+        /// <summary>
+        /// Changes how many cells sit in a row, at runtime. <c>1</c> turns the view back into a list.
+        ///
+        /// <para>Every live cell is released and rebuilt: a handle caches the offset and the column
+        /// anchors it was laid out with, and both are wrong the moment the row width changes.
+        /// Keeping the scroll position would be meaningless anyway — the same offset lands on a
+        /// different item once items repack into rows, so the view stays where it is numerically and
+        /// the caller re-aims with <see cref="ScrollToIndex"/> if it cares.</para>
+        /// </summary>
+        public void SetCrossAxisCount(int count)
+        {
+            if (count < 1)
+                throw new ArgumentOutOfRangeException(
+                    nameof(count), $"{nameof(CrossAxisCount)} must be >= 1 (was {count}). Use 1 for a list.");
+
+            if (RejectReentrant(nameof(SetCrossAxisCount))) return;
+            if (count == _settings.CrossAxisCount) return;
+
+            // Build first, adopt second — the same rule as SetItemSizeProvider, and it applies here
+            // for a sharper reason: a size provider that throws partway would otherwise leave the
+            // column count already changed while the offset table is still the old one, so the next
+            // layout would place columns against list offsets and overlap them. Nothing after the
+            // throw would run to put that right.
+            IItemOffsets rebuilt = BuildOffsets(_sizeProvider, count);
+
+            _settings.OverrideCrossAxisCount(count);
+            _offsets = rebuilt;
+
             ReleaseAllShown();
             ApplyContentSize();
             Pump();
@@ -174,7 +217,7 @@ namespace Sinkii09.UIFramework
             if (_sizeProvider == null) return;
             if (RejectReentrant(nameof(RefreshSizes))) return;
 
-            IItemOffsets rebuilt = BuildOffsets(_sizeProvider);
+            IItemOffsets rebuilt = BuildOffsets(_sizeProvider, _settings.CrossAxisCount);
             _offsets = rebuilt;
 
             ReleaseAllShown();
@@ -190,27 +233,88 @@ namespace Sinkii09.UIFramework
         /// caller's follow-up <c>Pump()</c> would make the pump reject itself and leave the list
         /// silently empty.</para>
         /// </summary>
-        private void RebuildOffsets() => _offsets = BuildOffsets(_sizeProvider);
+        private void RebuildOffsets() => _offsets = BuildOffsets(_sizeProvider, _settings.CrossAxisCount);
 
         /// <summary>
         /// Produces the table for the current count under <paramref name="sizeProvider"/>, or throws
         /// having changed nothing. Callers assign the result — that is what keeps a throwing provider
         /// from leaving the view in a state it cannot be talked out of.
         /// </summary>
-        private IItemOffsets BuildOffsets(Func<int, float> sizeProvider)
+        private IItemOffsets BuildOffsets(Func<int, float> sizeProvider, int crossAxisCount)
         {
-            if (sizeProvider == null)
-                return new UniformOffsets(_itemCount, _settings.CellSize, _settings.Spacing);
 
-            _rebuildingOffsets = true;
-            try
+            // The inner table is built over ROWS. Handing it the item count instead makes the
+            // content rect that many times too tall, with nothing on screen to show for it.
+            int strideCount = crossAxisCount <= 1
+                ? _itemCount
+                : (_itemCount + crossAxisCount - 1) / crossAxisCount;
+
+            IItemOffsets strides;
+
+            if (sizeProvider == null)
             {
-                return new PrefixSumOffsets(_itemCount, sizeProvider, _settings.Spacing);
+                strides = new UniformOffsets(strideCount, _settings.CellSize, _settings.Spacing);
             }
-            finally
+            else
             {
-                _rebuildingOffsets = false;
+                _rebuildingOffsets = true;
+                try
+                {
+                    strides = new PrefixSumOffsets(
+                        strideCount, RowSizeFrom(sizeProvider, crossAxisCount), _settings.Spacing);
+                }
+                finally
+                {
+                    _rebuildingOffsets = false;
+                }
             }
+
+            return crossAxisCount <= 1 ? strides : new GridOffsets(strides, crossAxisCount, _itemCount);
+        }
+
+        /// <summary>
+        /// Turns the consumer's per-ITEM size provider into the per-ROW one the table needs, by
+        /// taking the tallest item in each row.
+        ///
+        /// <para>The public contract stays "declare the size of item <c>i</c>" in both modes, which
+        /// is the point: a caller does not have to know whether the view is currently a grid. Every
+        /// cell in a row is then laid out at the row's height — the same rule a uniform-span grid
+        /// uses everywhere else, and the reason a short cell in a tall row leaves space rather than
+        /// overlapping its neighbour below.</para>
+        ///
+        /// <para>At one column this returns the caller's own delegate untouched, so the single-column
+        /// path is not merely equivalent — it is the same object making the same calls.</para>
+        /// </summary>
+        private Func<int, float> RowSizeFrom(Func<int, float> itemSize, int crossAxisCount)
+        {
+            if (crossAxisCount <= 1) return itemSize;
+
+            return row =>
+            {
+                int first = row * crossAxisCount;
+                int end = Math.Min(first + crossAxisCount, _itemCount);
+
+                float tallest = 0f;
+                for (int i = first; i < end; i++)
+                {
+                    float size = itemSize(i);
+
+                    // Checked per ITEM, not left to PrefixSumOffsets to catch per row. Two reasons:
+                    // a row keeps its tallest, so one negative item beside a positive one would pass
+                    // unnoticed here while the list path rejects it outright; and the error
+                    // PrefixSumOffsets raises names the index it was given, which in grid mode is a
+                    // ROW — sending whoever reads it to the wrong item entirely.
+                    if (!(size > 0f))
+                        throw new ArgumentOutOfRangeException(
+                            nameof(itemSize),
+                            $"[RecyclerView] '{name}': declared size for index {i} was {size}. " +
+                            "Sizes must be positive.");
+
+                    if (size > tallest) tallest = size;
+                }
+
+                return tallest;
+            };
         }
 
         /// <summary>Sizes the content rect to the current table. No-ops before initialization.</summary>

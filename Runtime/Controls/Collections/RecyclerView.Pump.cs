@@ -49,7 +49,8 @@ namespace Sinkii09.UIFramework
             // so the ceiling has to scale with how many cells the viewport plus its create bands
             // hold. See RecycleWindow.MaxIterationsFor.
             int maxIterations = RecycleWindow.MaxIterationsFor(
-                viewportSize, _settings.CreateDistance, _offsets.MinStride, _itemCount);
+                viewportSize, _settings.CreateDistance, _offsets.MinStride, _itemCount,
+                _offsets.ItemsPerStride);
 
             int iterations = 0;
             while (true)
@@ -91,7 +92,8 @@ namespace Sinkii09.UIFramework
             return new WindowState(
                 viewportStart, viewportSize, _itemCount, _shown.Count, _tick,
                 head.Index, head.Offset, head.DeclaredSize, head.CreatedTick,
-                tail.Index, tail.Offset, tail.DeclaredSize, tail.CreatedTick);
+                tail.Index, tail.Offset, tail.DeclaredSize, tail.CreatedTick,
+                _offsets.ItemsPerStride);
         }
 
         private void Apply(WindowAction action)
@@ -166,13 +168,39 @@ namespace Sinkii09.UIFramework
         private void VerifyMeasurement(CellHandle handle)
         {
             float measured = ContentLayout.MeasureCell(handle.Rect, _axis);
-            if (Mathf.Abs(measured - handle.DeclaredSize) < 0.5f) return;
+            if (Mathf.Abs(measured - handle.DeclaredSize) >= 0.5f)
+            {
+                Debug.LogError(
+                    $"[RecyclerView] '{name}' cell at index {handle.Index} measured {measured:F1} but " +
+                    $"was declared {handle.DeclaredSize:F1}. The view owns cell size — fix the size " +
+                    "provider (or CellSize) to match, and remove any ContentSizeFitter/LayoutGroup " +
+                    "driving the scroll axis.", this);
+            }
+
+            VerifyColumnWidth(handle);
+        }
+
+        /// <summary>
+        /// A grid's column width comes from fractional anchors, so nothing declares it and the
+        /// along-axis check above cannot see it go wrong. A <c>ContentSizeFitter</c> on the cross
+        /// axis overrides those anchors, and the result is a cell that overlaps its neighbour or
+        /// leaves a gap — visible on screen, silent in the console, and easy to blame on the grid.
+        /// </summary>
+        private void VerifyColumnWidth(CellHandle handle)
+        {
+            if (!_settings.IsGrid || _content == null) return;
+
+            float expected = _axis.CrossSizeOf(_content.rect) / _settings.CrossAxisCount
+                             - _settings.CrossSpacing;
+            if (expected <= 0f) return;
+
+            float measured = _axis.CrossSizeOf(handle.Rect.rect);
+            if (Mathf.Abs(measured - expected) < 0.5f) return;
 
             Debug.LogError(
-                $"[RecyclerView] '{name}' cell at index {handle.Index} measured {measured:F1} but " +
-                $"was declared {handle.DeclaredSize:F1}. The view owns cell size — fix the size " +
-                "provider (or CellSize) to match, and remove any ContentSizeFitter/LayoutGroup " +
-                "driving the scroll axis.", this);
+                $"[RecyclerView] '{name}' cell at index {handle.Index} is {measured:F1} wide across " +
+                $"the scroll axis but its column is {expected:F1}. Columns are sized by anchors — " +
+                "remove any ContentSizeFitter/LayoutGroup driving the cross axis on the cell.", this);
         }
     }
 }

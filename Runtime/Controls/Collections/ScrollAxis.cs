@@ -54,6 +54,9 @@ namespace Sinkii09.UIFramework
         /// <summary>Size of a rect along the scroll axis.</summary>
         public float SizeOf(Rect rect) => Horizontal ? rect.width : rect.height;
 
+        /// <summary>Size of a rect across the scroll axis — the direction columns run in.</summary>
+        public float CrossSizeOf(Rect rect) => Horizontal ? rect.height : rect.width;
+
         /// <summary>Component of a vector along the scroll axis.</summary>
         public float Along(Vector2 value) => Horizontal ? value.x : value.y;
 

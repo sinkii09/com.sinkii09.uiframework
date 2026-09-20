@@ -30,9 +30,39 @@ namespace Sinkii09.UIFramework
             handle.DeclaredSize = _offsets.SizeOf(index);
             handle.CreatedTick = _tick;
 
-            ContentLayout.SizeCell(handle.Rect, handle.DeclaredSize, _axis);
-            ContentLayout.PlaceCell(handle.Rect, handle.Offset, _axis);
+            ApplyCellLayout(handle);
             return handle;
+        }
+
+        /// <summary>
+        /// Sizes and places one cell. The only place that knows whether this view is a list or a
+        /// grid, so the two paths cannot drift apart.
+        ///
+        /// <para>A single-column view takes the <b>identical</b> calls it always did — a branch, not
+        /// a generalisation, which is what keeps <see cref="UniformOffsets"/>'s role as the
+        /// pre-grid regression anchor meaningful.</para>
+        /// </summary>
+        private void ApplyCellLayout(CellHandle handle)
+        {
+            if (!_settings.IsGrid)
+            {
+                // Restore the full-cross stretch before sizing. A pooled cell may have been laid out
+                // as part of a grid earlier in this view's life, and PlaceCellInGrid writes
+                // fractional anchors that neither SizeCell nor PlaceCell touch — so without this,
+                // SetCrossAxisCount(1) leaves every reused cell a third of the width, off-centre,
+                // and nothing reports it. The write is idempotent for a view that was never a grid:
+                // these are the same anchors ConfigureCell gave the cell at birth.
+                ContentLayout.ConfigureRect(handle.Rect, _axis);
+                ContentLayout.SizeCell(handle.Rect, handle.DeclaredSize, _axis);
+                ContentLayout.PlaceCell(handle.Rect, handle.Offset, _axis);
+                return;
+            }
+
+            int crossAxisCount = _settings.CrossAxisCount;
+
+            ContentLayout.PlaceCellInGrid(
+                handle.Rect, handle.Offset, handle.DeclaredSize,
+                handle.Index % crossAxisCount, crossAxisCount, _settings.CrossSpacing, _axis);
         }
 
         private void ReleaseAt(int slot)
@@ -103,8 +133,7 @@ namespace Sinkii09.UIFramework
             // path that changes sizes also releases every cell, which is an invariant elsewhere in
             // the file rather than anything this method enforces.
             handle.DeclaredSize = _offsets.SizeOf(index);
-            ContentLayout.SizeCell(handle.Rect, handle.DeclaredSize, _axis);
-            ContentLayout.PlaceCell(handle.Rect, handle.Offset, _axis);
+            ApplyCellLayout(handle);
             _pool.FlushRecycled();
         }
 

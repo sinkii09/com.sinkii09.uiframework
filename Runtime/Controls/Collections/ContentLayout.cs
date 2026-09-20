@@ -58,6 +58,48 @@ namespace Sinkii09.UIFramework
             cell.anchoredPosition3D = axis.Compose(axis.ToLocal(offset), 0f);
         }
 
+        /// <summary>
+        /// Sizes and places a cell inside one column of a grid, in a single call.
+        ///
+        /// <para><b>The column anchors are rewritten on every bind, not once per instantiation.</b>
+        /// A pooled cell first created for column 0 will later serve column 2, and anchors written
+        /// in <see cref="ConfigureCell"/> would travel with it — cells would pile up in one column
+        /// after the first recycle. This is the same trap the size path already documents, one field
+        /// over.</para>
+        ///
+        /// <para>The column is expressed as <b>fractional anchors</b> rather than an explicit width,
+        /// so a change in the viewport's cross-axis size re-lays the columns out with no code and no
+        /// notification — there is no resize hook anywhere in this control. The cross
+        /// <c>sizeDelta</c> then insets each cell by <paramref name="crossSpacing"/>, which shows up
+        /// as a full gap between columns and half of one outside the first and last.</para>
+        /// </summary>
+        public static void PlaceCellInGrid(
+            RectTransform cell, float offset, float size, int column, int crossAxisCount,
+            float crossSpacing, in ScrollAxis axis)
+        {
+            float lower = (float)column / crossAxisCount;
+            float upper = (float)(column + 1) / crossAxisCount;
+
+            if (axis.Horizontal)
+            {
+                // Bands are mirrored here on purpose. The cross axis of a horizontal list is Y,
+                // which grows upward, so using the fractions as-is would put column 0 at the BOTTOM
+                // of each row and read backwards. Column 0 is the first column in both orientations.
+                cell.anchorMin = new Vector2(axis.Pivot.x, 1f - upper);
+                cell.anchorMax = new Vector2(axis.Pivot.x, 1f - lower);
+                cell.sizeDelta = new Vector2(size, -crossSpacing);
+            }
+            else
+            {
+                cell.anchorMin = new Vector2(lower, axis.Pivot.y);
+                cell.anchorMax = new Vector2(upper, axis.Pivot.y);
+                cell.sizeDelta = new Vector2(-crossSpacing, size);
+            }
+
+            // Cross pivot is 0.5 in all four directions, so 0 centres the cell in its column band.
+            cell.anchoredPosition3D = axis.Compose(axis.ToLocal(offset), 0f);
+        }
+
         /// <summary>Sizes the content root to span the whole list.</summary>
         public static void SetContentSize(RectTransform content, float totalSize, in ScrollAxis axis)
         {
