@@ -22,7 +22,8 @@ namespace Sinkii09.UIFramework
     /// notification has already claimed, stranding an invisible toast in a live slot forever)
     /// cannot be expressed.</para>
     /// </summary>
-    public sealed class NotificationService : INotificationService, IInitializable, ITickable, System.IDisposable
+    public sealed class NotificationService : INotificationService, INotificationSuspender,
+                                              IInitializable, ITickable, System.IDisposable
     {
         // A queue this deep already means something is spamming; the cap bounds memory and the
         // promotion scan. Not configurable: no consumer has needed it to be.
@@ -71,6 +72,17 @@ namespace Sinkii09.UIFramework
         private int _sequence;
         private bool _disposed;
 
+        // Caller-declared suspension (INotificationSuspender). Reference-counted, and on a clock:
+        // see TrackSuspension for why it has to expire.
+        private int _suspendDepth;
+        private float _suspendedFor;
+        private string _suspendReason;
+
+        // Bumped when a suspension is force-expired. Tokens carry the epoch they were issued in, so
+        // a stale one disposed later cannot decrement a suspension that somebody else now holds.
+        private int _suspendEpoch;
+        internal float _maxSuspendSeconds;
+
         public int ActiveCount => _entries.Count;
 
         // Test seams. ActiveCount alone cannot distinguish "dropped a waiter" from "dropped a
@@ -105,6 +117,7 @@ namespace Sinkii09.UIFramework
             _defaultDuration = config.NotificationDurationSeconds;
             _maxLifetime = config.NotificationMaxLifetimeSeconds;
             _fadeSeconds = config.NotificationFadeSeconds;
+            _maxSuspendSeconds = config.NotificationMaxSuspendSeconds;
 
             // Clamped, because MaxVisible is user-editable and a value above MaxQueued would make
             // the overflow rule (drop the lowest-priority WAITING entry) unsatisfiable.
@@ -188,28 +201,40 @@ namespace Sinkii09.UIFramework
         // zeroing every timer and passing whatever the implementation happens to do.
         internal void Tick(float dt)
         {
+            // BEFORE the early-out, deliberately. A token leaked while nothing was queued would
+            // otherwise never expire and never log, and the leak would only surface much later as
+            // toasts that mysteriously stopped appearing.
+            bool deferring = TrackSuspension(dt);
+
             if (_entries.Count == 0 && !AnySlotBusy()) return;
 
             // The dismiss timer pauses behind the loading curtain, because a toast on the
             // Notification layer sits UNDER it and would otherwise expire unseen. It does not pause
             // on the fallback layer, where the toast draws over the curtain and is plainly visible.
-            bool hideBehindCurtain = CurtainUp() && !_usingFallbackLayer;
+            //
+            // A caller's suspension means the same thing for the same reason, minus that exception:
+            // the framework cannot see what the caller put on top, so it takes their word for it.
+            bool obscured = deferring || (CurtainUp() && !_usingFallbackLayer);
 
             for (int i = _entries.Count - 1; i >= 0; i--)
             {
                 Entry e = _entries[i];
 
-                // Lifetime is never paused: it is the guarantee that an entry terminates. Pausing
-                // it would let an overlay that never hides make every entry immortal, and at
-                // MaxQueued every later Notify would be dropped forever.
-                e.Lifetime += dt;
+                // Lifetime is never paused BY THE CURTAIN: it is the guarantee that an entry
+                // terminates, and an overlay that never hides would otherwise make every entry
+                // immortal, with MaxQueued then dropping every later Notify forever.
+                //
+                // A caller suspension DOES pause it, and that is the whole point — a reward toast
+                // must not expire unseen behind a ten-second animation. What makes that safe is that
+                // the suspension itself expires; see TrackSuspension.
+                if (!deferring) e.Lifetime += dt;
 
                 // Lifetime accrues while WAITING and behind the curtain too, so a long curtain or a
                 // long saturation eventually discards the waiting queue rather than growing it.
                 // Only a VISIBLE entry burns its dismiss timer. A waiting one that counted down
                 // would expire unseen while saturated — which would make priority ordering
                 // decorative, since a queued Error could die before a slot ever freed.
-                if (e.Slot >= 0 && !hideBehindCurtain) e.Remaining -= dt;
+                if (e.Slot >= 0 && !obscured) e.Remaining -= dt;
 
                 if (e.Remaining <= 0f || e.Lifetime >= _maxLifetime) Retire(e);
             }
@@ -219,7 +244,12 @@ namespace Sinkii09.UIFramework
             // Promotion happens ONCE per tick and is computed from the entry list, never from a
             // fade continuation and never from "which slots look free". Two slots finishing a fade
             // in the same frame would otherwise each promote the same waiter.
-            PromoteWaiters();
+            //
+            // Skipped entirely while deferring. Letting a waiter take a slot would fade it in under
+            // the caller's overlay, where nobody sees it, and it would then be sitting there already
+            // fully faded the moment they let go — the queue is meant to DRAIN on resume, not to
+            // have quietly run down behind the curtain.
+            if (!deferring) PromoteWaiters();
 
             // AFTER promotion, deliberately. Hiding at the end of AdvanceSlots instead would toggle
             // the host off and straight back on whenever a slot releases and a waiter is promoted in
@@ -387,6 +417,90 @@ namespace Sinkii09.UIFramework
             => content.DurationSeconds > 0f ? content.DurationSeconds : _defaultDuration;
 
         private bool CurtainUp() => _overlay != null && _overlay.IsShown;
+
+        public System.IDisposable Suspend(string reason)
+        {
+            if (_suspendDepth == 0)
+            {
+                _suspendedFor = 0f;
+                _suspendReason = reason;
+            }
+
+            _suspendDepth++;
+            return new SuspendToken(this, _suspendEpoch);
+        }
+
+        private void Resume(int epoch)
+        {
+            // A token issued before a force-expiry is dead. Letting it through would decrement a
+            // suspension a DIFFERENT caller is holding right now, which is the same class of bug as
+            // double-dispose and just as invisible.
+            if (epoch != _suspendEpoch || _suspendDepth == 0) return;
+
+            _suspendDepth--;
+            if (_suspendDepth > 0) return;
+
+            _suspendedFor = 0f;
+            _suspendReason = null;
+        }
+
+        // Advances the suspension clock and answers "is the queue still being held back". Split out
+        // so Tick reads as a sequence of decisions instead of bookkeeping.
+        //
+        // The cap is not defensive padding. Suspending freezes Lifetime, and Lifetime is the only
+        // thing guaranteeing an entry ever leaves the list; a token leaked by an overlay that never
+        // closes would therefore freeze every entry permanently, fill the queue to MaxQueued, and
+        // turn every later Notify into a refusal. Expiring the suspension turns that from silent
+        // permanent breakage into one logged error and a queue that drains.
+        private bool TrackSuspension(float dt)
+        {
+            if (_suspendDepth <= 0) return false;
+
+            _suspendedFor += dt;
+            if (_suspendedFor < _maxSuspendSeconds) return true;
+
+            Debug.LogError(
+                $"[NotificationService] Suspension '{_suspendReason}' has lasted longer than " +
+                $"{_maxSuspendSeconds:0.#}s and has been dropped. A Suspend() token was almost " +
+                "certainly never disposed — wrap it in a using statement.");
+
+            // CLEARED, not merely ignored. The first attempt at this left the depth alone and gave
+            // each new Suspend a fresh window, which was wrong twice over: the leaked token kept
+            // holding the queue after a legitimate caller released its own, and a game that suspends
+            // regularly would re-arm the clock forever so the cap could never fire at all.
+            //
+            // Dropping everything and bumping the epoch makes the next Suspend a clean start, and
+            // makes the leaked token's eventual Dispose a no-op instead of a stolen decrement.
+            _suspendDepth = 0;
+            _suspendedFor = 0f;
+            _suspendReason = null;
+            _suspendEpoch++;
+            return false;
+        }
+
+        // Disposing twice must not release somebody else's suspension, so the token remembers
+        // whether it has been spent. A paired Suspend()/Resume() pair could not offer that, which is
+        // the reason this returns a token at all.
+        private sealed class SuspendToken : System.IDisposable
+        {
+            private NotificationService _owner;
+            private readonly int _epoch;
+
+            internal SuspendToken(NotificationService owner, int epoch)
+            {
+                _owner = owner;
+                _epoch = epoch;
+            }
+
+            public void Dispose()
+            {
+                // Interlocked rather than read-then-null: a `using` inside an async method can resume
+                // on a thread-pool thread, and two threads both seeing a live owner would release one
+                // suspension twice and un-hold a queue somebody else was still holding.
+                NotificationService owner = System.Threading.Interlocked.Exchange(ref _owner, null);
+                owner?.Resume(_epoch);
+            }
+        }
 
         // The host is pre-hidden in Awake so the first frame after a scene load never flashes an
         // empty container; nothing else would ever bring it back. Deliberately NOT UIViewBase's
