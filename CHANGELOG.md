@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-09-20
+
 ### Added
 - **Multi-column grids in `RecyclerView`** — `SetCrossAxisCount(n)`, or `Cross Axis Count` on the
   settings block. `1` is the default and a view left there behaves exactly as it did before: the
