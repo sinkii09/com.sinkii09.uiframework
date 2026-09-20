@@ -13,7 +13,7 @@ namespace Sinkii09.UIFramework
     //             override Configure() to register additional services.
     // Assign UIFrameworkConfig in the Inspector, or place UIFrameworkConfig.asset in Resources/.
     [AddComponentMenu("UIFramework/UIFrameworkLifetimeScope")]
-    public class UIFrameworkLifetimeScope : LifetimeScope
+    public partial class UIFrameworkLifetimeScope : LifetimeScope
     {
         private static UIFrameworkLifetimeScope _instance;
 
@@ -142,7 +142,9 @@ namespace Sinkii09.UIFramework
             if (FindAnyObjectByType<NotificationHostView>(FindObjectsInactive.Include) != null)
                 builder.RegisterEntryPoint<NotificationService>(Lifetime.Singleton).AsSelf();
             else
-                builder.RegisterInstance<INotificationService>(new NullNotificationService());
+                builder.RegisterInstance(new NullNotificationService())
+                       .As<INotificationService>()
+                       .As<INotificationSuspender>();
 
             // Scans assemblies for concrete UIView<T> subclasses; populates UIViewRegistry.Registrations.
             UIViewRegistry.AutoRegister();
@@ -202,59 +204,31 @@ namespace Sinkii09.UIFramework
             // developer's IInitializable bootstrap via GameLifecycleManager.RegisterState<T>().
             builder.RegisterEntryPoint<GameLifecycleManager>(Lifetime.Singleton).AsSelf();
 
-            // --- Persistence ---
-            builder.Register<IStorageBackend, LocalFileStorageBackend>(Lifetime.Singleton);
-
-            // Registered unconditionally because VContainer does not honour C# default parameter
-            // values — JsonSaveService's registry parameter is a HARD dependency, so leaving it out
-            // when no game has migrations would fail the container build outright.
-            //
-            // The Exists guard makes the override order-independent. A game supplies its own by
-            // registering it in Configure, which normally runs AFTER base.Configure and wins by
-            // VContainer's last-wins rule; but a game that registers BEFORE calling base would
-            // otherwise have its registry overwritten by this empty one, and the symptom is brutal —
-            // every migrated save reads as "newer than supported" and the consumer disables saving
-            // for the whole session.
-            // includeInterfaceTypes matters: ContainerBuilder.Exists(type) alone compares only
-            // ImplementationType (ContainerBuilder.cs:118-120), so a game registering
-            // Register<TInterface, TImpl>() would NOT be detected and this default would be written
-            // over the top of it — last-wins would then hand the service the framework's instance and
-            // the game's registration would silently do nothing.
-            if (!builder.Exists(typeof(SaveMigrationRegistry), includeInterfaceTypes: true))
-                builder.RegisterInstance(SaveMigrationRegistry.Empty);
-
-            // Same shape, same reason: a constructor parameter is a hard dependency, so leaving this
-            // out would fail the container build for every game that does not use slots. Singleton
-            // ONLY — JsonSaveService is a root singleton and UIViewFactory gives each view its own
-            // child container, so a Scoped registration would fork the slot per view and a slot switch
-            // would never reach the service. That cannot be detected at runtime; see ISaveSlotContext.
-            // AsSelf as well as the interface: ISaveSlotContext is read-only by design, so a game
-            // that wants to CHANGE slots resolves the concrete SaveSlotContext and sets ActiveSlot.
-            // Without this the only way to switch slots would be to replace the registration.
-            if (!builder.Exists(typeof(ISaveSlotContext), includeInterfaceTypes: true))
-                builder.Register<ISaveSlotContext, SaveSlotContext>(Lifetime.Singleton).AsSelf();
-
-            // AsSelf so a game can reach OnSaveRecoveredAsObservable, which lives on the concrete type
-            // rather than on ISaveService — adding a member to that interface would break every
-            // implementer and force a major version. One registration, one instance, two ways to ask
-            // for it.
-            builder.Register<ISaveService, JsonSaveService>(Lifetime.Singleton).AsSelf();
+            RegisterPersistence(builder, config);
         }
 
         // Override in your game's LifetimeScope to substitute a custom BootState subclass.
         protected virtual void RegisterBootState(IContainerBuilder builder)
             => builder.Register<BootState>(Lifetime.Singleton);
 
-        private static void RegisterLoader(IContainerBuilder builder, UIFrameworkConfig config)
+        // ONE loader instance behind TWO interfaces. IUILoader answers "give me the component on
+        // this prefab"; IAssetLoader answers "give me this asset". A single registration exposing
+        // both is what keeps one handle ledger per key — registering them separately would build two
+        // loader objects and, under Addressables, two ref-counts for the same handle, so the second
+        // UnloadAsync would release something already released.
+        internal static void RegisterLoader(IContainerBuilder builder, UIFrameworkConfig config)
         {
-
             if (config.LoaderMode == LoaderMode.Addressables)
             {
-                builder.Register<IUILoader, AddressablesUILoader>(Lifetime.Singleton);
+                builder.Register<AddressablesUILoader>(Lifetime.Singleton)
+                       .As<IUILoader>()
+                       .As<IAssetLoader>();
                 return;
             }
 
-            builder.Register<IUILoader, ResourcesUILoader>(Lifetime.Singleton);
+            builder.Register<ResourcesUILoader>(Lifetime.Singleton)
+                   .As<IUILoader>()
+                   .As<IAssetLoader>();
         }
 
         private static UIFrameworkConfig LoadDefaultConfig()

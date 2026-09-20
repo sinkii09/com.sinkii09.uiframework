@@ -55,6 +55,28 @@ namespace Sinkii09.UIFramework
                  "completes, so this also paces how quickly a waiting toast is promoted.")]
         public float NotificationFadeSeconds = 0.2f;
 
+        [Min(1f)]
+        [Tooltip("How long an INotificationSuspender.Suspend() may hold the toast queue before it is " +
+                 "ignored and an error is logged. Suspending freezes the lifetime that guarantees a " +
+                 "toast eventually leaves the queue, so a leaked token without this cap would freeze " +
+                 "every notification for the session. Default covers the longest reward animation.")]
+        public float NotificationMaxSuspendSeconds = 30f;
+
+        // --- Autosave ---------------------------------------------------------------------
+        // Consumed by AutoSaveScheduler. ISaveService rewrites the WHOLE JSON payload for a key on
+        // every save, so these exist to turn a burst of changes into one write rather than dozens.
+
+        [Min(0f)]
+        [Tooltip("Seconds a key may sit dirty before it is written. 0 disables autosave entirely — " +
+                 "no scheduler is registered and the game owns every save, including the one on pause.")]
+        public float AutoSaveDebounceSeconds = 2f;
+
+        [Min(0f)]
+        [Tooltip("Hard cap on how long a key that keeps being re-dirtied may go unwritten. Without " +
+                 "it, state that changes every frame would restart the debounce forever and never be " +
+                 "saved at all. Clamped up to AutoSaveDebounceSeconds; ignored when that is 0.")]
+        public float AutoSaveMaxLatencySeconds = 15f;
+
         // --- Render scheduling ------------------------------------------------------------
 
         [Min(0)]
