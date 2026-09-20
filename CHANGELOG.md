@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-09-20
+
 The data foundation: nothing in a consuming game could survive being backgrounded, a damaged save
 crashed at boot, and reward toasts rendered underneath the overlay that raised them. Also the loader
 could not express "load this asset", which blocks content packs.
