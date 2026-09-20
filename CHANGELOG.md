@@ -2,6 +2,73 @@
 
 ## [Unreleased]
 
+The data foundation: nothing in a consuming game could survive being backgrounded, a damaged save
+crashed at boot, and reward toasts rendered underneath the overlay that raised them. Also the loader
+could not express "load this asset", which blocks content packs.
+
+Additive throughout. No member was added to any existing public interface, `LoadAsync` keeps its
+exact contract and exception types, and no external implementation breaks — every new capability is a
+separate interface, because a service that cannot do the thing should not implement it.
+
+### Added
+- **`IAssetLoader`** — loads an asset by itself (ScriptableObject, Sprite, TextAsset, AudioClip).
+  `IUILoader` is a *prefab* loader: its `where T : Component` constraint makes anything else
+  inexpressible, which is not a missing feature but the wrong type. Both loaders implement both
+  interfaces and register as **one instance**, because an Addressables key owns exactly one handle and
+  two loader objects would keep two ref-count ledgers for it.
+  The method is `LoadAssetAsync` rather than an overload: generic constraints are not part of a
+  method signature in C#, so the same name on both interfaces is CS0111 on any class implementing both.
+- **Autosave.** `AppLifecycleSignals` (a sealed component the root scope adds to its own GameObject)
+  plus `IAutoSaveScheduler`, which coalesces marks into one write — `ISaveService` rewrites the whole
+  JSON payload per save, so marking on every field change would rewrite the player's entire progress
+  per field. Debounce plus a max-latency cap, both on `UIFrameworkConfig`; `0` disables it entirely
+  and registers nothing, so resolving the scheduler then fails loudly.
+- **`ISynchronousSaveService` / `ISynchronousStorageBackend`** — the pause flush.
+  `OnApplicationPause` cannot be awaited and the player loop stops when it returns, so the async path
+  is unusable there: `SaveAsync` awaits a per-key semaphore whose holder resumes on that loop, and
+  blocking the main thread for it deadlocks the app on the way out. `TrySaveSync` probes the gate with
+  a **zero timeout and never waits**.
+- **`SaveRecoveryCoordinator` + `ISaveRecoveryPrompt`** — a damaged save can now offer the player a
+  choice instead of crashing at boot. Corruption is recognised by an **allow-list** of
+  `JsonException`; everything else propagates untouched, because `JsonSaveService` awaits
+  `ReadAsync` outside its try block and a momentarily locked file arrives here as a raw `IOException`.
+  Answering "start fresh" to that would delete an intact save and its backup.
+- **`SaveRecoveryNotifier`** — `OnSaveRecoveredAsObservable` has existed since the backup system
+  shipped with nothing subscribed, so a successful recovery was silent and read to players as
+  unexplained lost progress. Now it raises a toast. Consumes the new `ISaveRecoveryEvents`, so it
+  follows a substituted save service instead of listening to an instance nobody writes through.
+- **`INotificationSuspender`** — holds the toast queue back while something covers it.
+  `Notification` sits below `Overlay`, so a reward toast raised during a full-screen animation was
+  shown to nobody. This generalises the curtain handling the service already had rather than adding a
+  parallel concept. Suspending also freezes the lifetime that normally guarantees an entry
+  terminates, which is safe only because a suspension **expires** and is then dropped outright.
+  `NullNotificationService` implements it too, so the `using` block is identical in a project with no
+  notification host.
+- **`Tools/UIFramework/Create Logic Assembly`** — generates an engine-free `*.Logic` assembly, its
+  EditMode test assembly, and csproj files that run the same sources under `dotnet test` without
+  opening Unity. Two variants, because getting them backwards is silent: editor-only tools versus
+  code that ships with the game.
+
+### Changed
+- `AddressablesUILoader` caches handles by `(address, type)` rather than address alone. One address
+  can legitimately be loaded as `Texture2D` and as `Sprite`, each with its own handle; address-only
+  keying either refused the second load or overwrote and leaked the first. `UnloadAsync` releases
+  every type held for an address, and a load that loses a concurrent race now releases its own handle
+  instead of dropping it retained.
+- `ResourcesUILoader.UnloadAsync` is still a no-op, but the comment saying Resources reference-counts
+  was simply false — assets stay until `Resources.UnloadUnusedAssets()`. Noted, because it means
+  unloading a content pack frees nothing under Resources and frees immediately under Addressables.
+- The root scope's persistence registrations moved into a `partial`
+  (`UIFrameworkLifetimeScope.Persistence.cs`). Registration order is unchanged, which matters because
+  VContainer resolves duplicates last-wins.
+
+### Fixed
+- **A save issued just before the app was backgrounded could be lost on mobile.** There were no
+  application-lifecycle hooks anywhere in `Runtime/`. The vault note on this recommended putting them
+  on `GameLifecycleManager`, which is a POCO and cannot receive a Unity message at all; they also
+  cannot go on `UIFrameworkLifetimeScope`, because Unity dispatches by name against the most-derived
+  type and a game subclass declaring `OnApplicationPause` would hide it silently.
+
 ## [3.2.0] - 2026-09-19
 
 Persistence redesign. The save system **did not work on WebGL at all** — and failed in the worst
