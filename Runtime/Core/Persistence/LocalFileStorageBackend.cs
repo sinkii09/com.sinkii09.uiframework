@@ -45,7 +45,7 @@ namespace Sinkii09.UIFramework
     // that saves a DIFFERENT key recurses synchronously — a two-key save cycle that merely spreads
     // across frames elsewhere is a stack overflow here. Same-key re-entry is safe: it suspends on the
     // semaphore and the outer call releases it.
-    public sealed class LocalFileStorageBackend : IStorageBackend
+    public sealed class LocalFileStorageBackend : IStorageBackend, ISynchronousStorageBackend
     {
         private readonly string _rootDir;
         private readonly DateTime _constructedAtUtc;
@@ -133,22 +133,34 @@ namespace Sinkii09.UIFramework
             await RunIo(() =>
             {
                 ct.ThrowIfCancellationRequested();
-                Directory.CreateDirectory(_rootDir);
-                var finalPath = PathFor(key);
-                var tempPath = finalPath + ".tmp";
-                File.WriteAllText(tempPath, contents);
-
-                // File.Replace requires the destination to exist; File.Move (2-arg) requires it not
-                // to. Branch covers first-save and every subsequent save atomically either way.
-                // ignoreMetadataErrors tolerates attribute/ACL-merge failures on the backup file
-                // without failing the primary replace — it does NOT swallow a genuine lock/IOException
-                // on the backup (e.g. AV/indexer holding it open); that residual risk is accepted,
-                // same treatment as the read/replace sharing-violation risk below.
-                if (File.Exists(finalPath))
-                    File.Replace(tempPath, finalPath, BackupPathFor(key), ignoreMetadataErrors: true);
-                else
-                    File.Move(tempPath, finalPath);
+                WriteCore(key, contents);
             }, ct);
+        }
+
+        // ISynchronousStorageBackend. The one moment awaiting is impossible: OnApplicationPause.
+        //
+        // Runs the SAME bytes-to-disk path as WriteAsync — deliberately the same method, not a copy —
+        // minus the dispatch and the token. That the write is atomic is what makes this safe to be
+        // interrupted: an OS kill part-way through leaves the previous save whole rather than torn.
+        public void WriteSync(string key, string contents) => WriteCore(key, contents);
+
+        private void WriteCore(string key, string contents)
+        {
+            Directory.CreateDirectory(_rootDir);
+            var finalPath = PathFor(key);
+            var tempPath = finalPath + ".tmp";
+            File.WriteAllText(tempPath, contents);
+
+            // File.Replace requires the destination to exist; File.Move (2-arg) requires it not
+            // to. Branch covers first-save and every subsequent save atomically either way.
+            // ignoreMetadataErrors tolerates attribute/ACL-merge failures on the backup file
+            // without failing the primary replace — it does NOT swallow a genuine lock/IOException
+            // on the backup (e.g. AV/indexer holding it open); that residual risk is accepted,
+            // same treatment as the read/replace sharing-violation risk below.
+            if (File.Exists(finalPath))
+                File.Replace(tempPath, finalPath, BackupPathFor(key), ignoreMetadataErrors: true);
+            else
+                File.Move(tempPath, finalPath);
         }
 
         public async UniTask<string> ReadAsync(string key, CancellationToken ct = default)

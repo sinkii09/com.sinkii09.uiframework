@@ -25,7 +25,8 @@ namespace Sinkii09.UIFramework
     // against the key the GAME knows, so "PlayerData.s1" would find no chain, and every slot above 0
     // would sit at the base schema version forever — never migrating, and never able to raise
     // SaveSchemaVersionException when a newer build wrote it.
-    public sealed class JsonSaveService : ISaveService, IDisposable
+    public sealed class JsonSaveService : ISaveService, ISynchronousSaveService,
+                                          ISaveRecoveryEvents, IDisposable
     {
         private readonly IStorageBackend _backend;
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _keyLocks = new();
@@ -116,6 +117,52 @@ namespace Sinkii09.UIFramework
                 // forever without a terminal event, so Failed carries the OCE as its Error.
                 _events.RaiseFailed(logical, ex);
                 throw;
+            }
+            catch (Exception ex)
+            {
+                _events.RaiseFailed(logical, ex);
+                throw;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        // ISynchronousSaveService. Mirrors SaveAsync exactly except for two things: it never waits,
+        // and it hands the payload to the backend's synchronous write.
+        //
+        // There is deliberately no public "is a save in flight" counter to go with this. The gate
+        // probe below already answers the only question anyone has — including for saves the game
+        // issued directly through ISaveService — and a counter with no caller is surface to maintain
+        // for nothing.
+        public bool TrySaveSync<T>(string key, T data) where T : class
+        {
+            if (_backend is not ISynchronousStorageBackend syncBackend)
+                return false;
+
+            var (logical, storage) = ResolveKey(key);
+
+            // Before the gate, same as SaveAsync: a programmer error must not take the lock.
+            if (data == null)
+                throw new ArgumentNullException(nameof(data),
+                    $"Save '{logical}': null data is not saveable — use DeleteAsync to remove a key.");
+
+            var gate = _keyLocks.GetOrAdd(storage, _ => new SemaphoreSlim(1, 1));
+
+            // Zero timeout, never a wait. The only caller runs inside OnApplicationPause, where the
+            // player loop is about to stop — blocking here for a write whose continuation resumes on
+            // that loop deadlocks the app on the way out. A held gate means a write with data at most
+            // one debounce window old is already going; let it finish.
+            if (!gate.Wait(0))
+                return false;
+
+            try
+            {
+                _events.RaiseStarted(logical);
+                syncBackend.WriteSync(storage, SaveEnvelopeCodec.Serialize(data, logical, _migrations, _settings));
+                _events.RaiseCompleted(logical);
+                return true;
             }
             catch (Exception ex)
             {
