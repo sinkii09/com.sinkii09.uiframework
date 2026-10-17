@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-10-15
+
+### Added
+- **Juice building blocks** (`Runtime/Juice/`) — additive, no existing API changed.
+  - `PressScaleFeedback` — squash on pointer-down, `OutBack` spring on release. Tracks pointer IDs
+    (hover-exit without a press is a no-op; multitouch holds until the last finger lifts), ignores
+    non-interactable `Selectable`s, unscaled time so it answers in a `timeScale = 0` pause menu.
+  - `PunchFeedback` — `PunchScale`, `Squash`, `Flash(Color)`. Scale and colour are independent
+    kill-and-restore channels, so a flash never cuts a punch. Base colour captured when idle, at
+    flash start, so game recolours survive. Safe to call before `Awake`.
+  - `RollingNumberLabel` — a TMP number that rolls to its new value. Rolls from the displayed value
+    (interrupt-safe), interpolates a 0..1 progress in `double` (exact above 2^24, where a float
+    tween lands on the wrong number), instant for the first value and while inactive. Must be the
+    label's only writer.
+  - `JuiceSequences` — `PreparePopIn` / `PlayStaggerPopInAsync(owner, items, ct)` / `RestorePopIn`.
+    Returns `UniTask`, not a raw `Sequence`: links and awaits internally, restores on cancel.
+- **`PopTransition`** — `UITransition` with an `OutBack` overshoot pop + fade in, and a shorter
+  shrink + fade out. Fades alpha itself (the animator only snaps alpha after the tween).
+
+### Design rules shipped with it
+- Every component restores to a **captured** base, never `Vector3.one`/a literal, and restores in
+  `OnDisable` (`SetLink` kills on destroy, not on disable).
+- **One scale driver per transform.** Base-scale capture refuses near-zero and warns — the usual
+  cause is a pop-in or transition scaling the same object.
+
 ## [3.4.0] - 2026-09-20
 
 ### Added
