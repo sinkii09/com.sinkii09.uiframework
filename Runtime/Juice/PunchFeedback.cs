@@ -104,13 +104,7 @@ namespace Sinkii09.UIFramework
             KillAndRestoreColor();
         }
 
-        private void KillAndRestoreScale()
-        {
-            if (_target == null) return;
-
-            _target.DOKill();
-            _target.localScale = _baseScale;
-        }
+        private void KillAndRestoreScale() => JuiceScale.KillAndRestore(_target, _baseScale);
 
         private void KillAndRestoreColor()
         {

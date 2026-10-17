@@ -37,7 +37,7 @@ namespace Sinkii09.UIFramework
         // owned by the animator's own restore, so scale only needs to land back at its normal value.
         public override void RestoreOnCancel(UIViewBase view)
         {
-            if (view != null) view.transform.localScale = Vector3.one;
+            ResetScale(view);
         }
     }
 }

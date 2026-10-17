@@ -6,15 +6,24 @@ using UnityEngine;
 
 namespace Sinkii09.UIFramework
 {
-    // Implements IUIAnimator using DOTween Pro tweens.
-    // SetUpdate(true) on every tween so UI animations run during Time.timeScale=0 pauses.
+    // Implements IUIAnimator with DOTween. Unscaled time comes from AwaitAsync, so UI animations
+    // run during Time.timeScale = 0 pauses.
+    //
+    // Owns CanvasGroup.alpha (the resting value after every transition) and LOCKS input for the
+    // duration. It never unlocks input: UIViewBase does that, only after OnShowAsync finishes.
     public class DOTweenUIAnimator : IUIAnimator
     {
-        public async UniTask ShowAsync(IUIView view, UITransition transition, CancellationToken ct = default)
+        public UniTask ShowAsync(IUIView view, UITransition transition, CancellationToken ct = default)
+            => PlayAsync(view, transition, show: true, ct);
+
+        public UniTask HideAsync(IUIView view, UITransition transition, CancellationToken ct = default)
+            => PlayAsync(view, transition, show: false, ct);
+
+        private static async UniTask PlayAsync(IUIView view, UITransition transition, bool show, CancellationToken ct)
         {
             if (view is not UIViewBase viewBase)
             {
-                Debug.LogWarning($"[DOTweenUIAnimator] ShowAsync: {view?.ViewId} is not UIViewBase — animation skipped.");
+                Debug.LogWarning($"[DOTweenUIAnimator] {(show ? "ShowAsync" : "HideAsync")}: {view?.ViewId} is not UIViewBase — animation skipped.");
                 return;
             }
 
@@ -25,81 +34,43 @@ namespace Sinkii09.UIFramework
                 return;
             }
 
+            // Locked in both directions, null transition included: a freshly-added CanvasGroup
+            // defaults to interactable = true, which would leave a view clickable for its entire
+            // OnShowAsync.
+            cg.interactable = false;
+            cg.blocksRaycasts = false;
+
+            float restAlpha = show ? 1f : 0f;
             if (transition == null)
             {
-                // Locked out here, restored by UIViewBase after OnShowAsync completes — matches the
-                // non-null-transition path below. Without this, a freshly-added CanvasGroup defaults
-                // to interactable=true (Unity's own default), so a view would be clickable for the
-                // view's ENTIRE OnShowAsync, not just briefly — this is the widest form of Finding 2.
-                cg.alpha = 1f;
-                cg.interactable = false;
-                cg.blocksRaycasts = false;
+                cg.alpha = restAlpha;
                 return;
             }
 
-            cg.interactable = false;
-            cg.blocksRaycasts = false;
+            // Visible BEFORE a show tween is built. A prior hide leaves alpha at 0, and Scale/Slide
+            // never touch alpha, so without this they played their whole show invisible and popped in
+            // at the end. Safe for alpha-driving transitions: their .From(0) applies at build time, in
+            // this same frame, so nothing renders at 1 first.
+            if (show) cg.alpha = 1f;
+
             try
             {
-                var showTween = transition.CreateShowTween(viewBase).SetLink(viewBase.gameObject);
-                await showTween.AwaitAsync(ct);
-                // Resting alpha, regardless of whether this transition animates alpha itself
-                // (Fade/ZoomOutFade already end here; Scale/Slide never touch alpha at all).
-                cg.alpha = 1f;
-                // interactable/blocksRaycasts restored by UIViewBase after OnShowAsync completes.
+                // SetTarget(view): a bare DOScale/DOAnchorPos targets the root transform, so a stray
+                // DOKill(transform) from other code would kill the transition and read as a cancellation.
+                var tween = show ? transition.CreateShowTween(viewBase) : transition.CreateHideTween(viewBase);
+                await tween.SetTarget(viewBase).SetLink(viewBase.gameObject).AwaitAsync(ct);
+                // Resting alpha regardless of whether the transition animates alpha itself.
+                cg.alpha = restAlpha;
             }
             catch (OperationCanceledException)
             {
-                // Geometry restore lives here, not in the tween's OnKill — AwaitAsync replaces
-                // that callback, and OnKill also fires on normal completion.
+                // Geometry restore lives here, not in the tween's OnKill — AwaitAsync replaces that
+                // callback, and OnKill also fires on normal completion.
                 transition.RestoreOnCancel(viewBase);
-                // Reset to hidden state — mid-tween alpha/scale is invalid.
-                cg.alpha = 0f;
-                cg.interactable = false;
-                cg.blocksRaycasts = false;
-                throw;
-            }
-        }
-
-        public async UniTask HideAsync(IUIView view, UITransition transition, CancellationToken ct = default)
-        {
-            if (view is not UIViewBase viewBase)
-            {
-                Debug.LogWarning($"[DOTweenUIAnimator] HideAsync: {view?.ViewId} is not UIViewBase — animation skipped.");
-                return;
-            }
-
-            var cg = viewBase.CanvasGroup;
-            if (cg == null)
-            {
-                Debug.LogError($"[DOTweenUIAnimator] {view.ViewId} has no CanvasGroup.");
-                return;
-            }
-
-            if (transition == null)
-            {
-                cg.alpha = 0f;
-                cg.interactable = false;
-                cg.blocksRaycasts = false;
-                return;
-            }
-
-            cg.interactable = false;
-            cg.blocksRaycasts = false;
-            try
-            {
-                var hideTween = transition.CreateHideTween(viewBase).SetLink(viewBase.gameObject);
-                await hideTween.AwaitAsync(ct);
-                // Resting alpha, regardless of whether this transition animates alpha itself.
-                cg.alpha = 0f;
-            }
-            catch (OperationCanceledException)
-            {
-                transition.RestoreOnCancel(viewBase);
-                // Reset to fully visible state — UIViewBase.HideAsync catch handles SetActive(false).
-                cg.alpha = 1f;
-                cg.interactable = true;
-                cg.blocksRaycasts = true;
+                // A cancelled show is hidden (its mid-tween pose is invalid). A cancelled hide is put
+                // back at its visible pose, but input stays locked ON PURPOSE: every UIViewBase.HideAsync
+                // exit deactivates the view, and the next show unlocks input after OnShowAsync.
+                cg.alpha = 1f - restAlpha;
                 throw;
             }
         }

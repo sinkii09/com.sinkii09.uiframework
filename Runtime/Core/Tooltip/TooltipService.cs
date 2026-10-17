@@ -48,7 +48,7 @@ namespace Sinkii09.UIFramework
         // Serialises the view's own ShowAsync/HideAsync instead of cancelling them.
         //
         // UIViewBase.HideAsync deactivates the GameObject in BOTH its normal and its cancellation
-        // path (UIViewBase.cs:87-101), and leaves IsVisible true for the whole in-flight hide. So
+        // path (UIViewBase.HideAsync's catch blocks), and leaves IsVisible true for the whole in-flight hide. So
         // cancelling a hide to start a show — exactly what the re-show window provokes — used to
         // let the cancelled hide's tail deactivate a tooltip the service already considered shown,
         // stranding it invisible forever. Chaining removes that race by construction.

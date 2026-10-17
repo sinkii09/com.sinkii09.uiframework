@@ -6,9 +6,11 @@ namespace Sinkii09.UIFramework
     // The "juicy popup" transition: shows by growing past full size and settling back (OutBack
     // overshoot) while fading in; hides quickly and quietly — a short shrink plus fade.
     // Hide is shorter than show on purpose: entrances deserve attention, exits should get out of the way.
-    // Fades alpha itself, like ZoomOutFadeTransition: the animator only snaps alpha AFTER the tween,
-    // and after a hide it is 0, so a scale-only pop would play invisible and appear at the end.
-    // SetUpdate(true) is applied by DOTweenUIAnimator — not needed here.
+    // Fades alpha itself (the fade is part of the look, not a visibility workaround — the animator
+    // sets alpha to 1 before any show tween).
+    // EaseType drives the FADE only. The scale legs are fixed (OutBack(Overshoot) in, InQuad out)
+    // because the overshoot IS the pop; tune Overshoot instead.
+    // SetUpdate(true) is applied by AwaitAsync — not needed here.
     [CreateAssetMenu(menuName = "UIFramework/Transitions/Pop", fileName = "PopTransition")]
     public class PopTransition : UITransition
     {
@@ -43,7 +45,7 @@ namespace Sinkii09.UIFramework
         // Stateless, canonical resting pose — this asset is shared by every view that references it.
         public override void RestoreOnCancel(UIViewBase view)
         {
-            if (view != null) view.transform.localScale = Vector3.one;
+            ResetScale(view);
         }
     }
 }

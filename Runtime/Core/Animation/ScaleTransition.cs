@@ -20,12 +20,12 @@ namespace Sinkii09.UIFramework
             return t.DOScale(StartScale, Duration).From(Vector3.one).SetEase(EaseType);
         }
 
-        // Resting pose is Vector3.one — both show and hide tweens ultimately settle there
-        // (show ends at one; hide's cancelled-mid-flight state is invisible either way since the
-        // animator has already zeroed alpha and the GO is about to be deactivated).
+        // Resting pose is Vector3.one — show ends there, and a hide cancelled mid-flight is restored
+        // to it because the view is deactivated right after and the next show starts from a resting
+        // pose (the animator's cancel path leaves alpha at 1, so the pose must be correct, not hidden).
         public override void RestoreOnCancel(UIViewBase view)
         {
-            if (view != null) view.transform.localScale = Vector3.one;
+            ResetScale(view);
         }
     }
 }

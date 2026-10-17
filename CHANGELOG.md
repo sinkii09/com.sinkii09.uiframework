@@ -2,6 +2,46 @@
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-10-17
+
+### Added
+- **`UIViewBase.PlayOwnedAsync(Tween, ct)`** — the recommended way to play custom choreography in
+  `OnShowAsync`/`OnHideAsync`. Links the tween to the view, targets it at the view (a `DOKill` on a
+  child or root transform cannot cancel it), runs unscaled, cancels on `ct` or view destruction, and
+  returns immediately for an already-dead tween instead of hanging. Replaces any `OnComplete`/`OnKill`
+  already set on the tween.
+- **`UIViewBase.AcceptsInput`** (protected virtual, default `true`) — views that must never take
+  raycasts return `false`; the framework keeps them non-blocking from `Awake` and on every
+  Show/Hide exit. `TooltipViewBase` and `NotificationHostView` override it (sealed).
+- Dev-build warning when a tooltip uses a `SlideTransition` (directly or inside a `SequenceTransition`).
+
+### Fixed
+- **Scale/Slide show transitions played invisible after any hide.** The hide left alpha at 0 and
+  neither transition touches alpha, so the view animated unseen and popped in at the end.
+  `DOTweenUIAnimator` now sets alpha to 1 before building the show tween.
+- **A `DOKill` on a view root cancelled its show.** Bare `DOScale`/`DOAnchorPos` transition tweens
+  targeted the root transform, so `PunchFeedback`/`PressScaleFeedback` (or any `DOKill(transform)`)
+  killed them and the view was hidden as if cancelled. Transition tweens now `SetTarget(view)`.
+- **A cancelled hide re-enabled input.** `interactable`/`blocksRaycasts` now stay false; the view is
+  deactivated anyway and the next show unlocks input after `OnShowAsync`.
+- **`TabIndicator` froze in pause menus.** Now unscaled time, and linked to the indicator object.
+
+### Changed
+- **Custom `UITransition` show tweens must set their own start alpha** (e.g. `DOFade(1, d).From(0)`).
+  A show tween that fades to 1 without `From` used to inherit the 0 a hide left behind; it now starts
+  at 1 and appears instantly. All built-in transitions already do this.
+- Juice components on a `UIViewBase` root now log a warning: transitions own a view root's scale.
+- Internal de-duplication, no behaviour change: `DOTweenUIAnimator` show/hide share one path;
+  `TooltipViewBase`/`NotificationHostView` no longer override `ShowAsync`/`HideAsync`; juice
+  kill-and-restore lives in `JuiceScale.KillAndRestore`; scale transitions share `ResetScale`.
+- The runtime test assembly now references `DOTween.dll`.
+
+### Known limitations
+- `SequenceTransition` of `[Scale, Fade]`: the Fade leg's `From(0)` applies when the sequence is
+  built, so the Scale leg still plays at alpha 0. Use `ZoomOutFadeTransition` or `PopTransition`.
+- `SlideTransition` assumes the view root is authored at `anchoredPosition` 0, and is not supported on
+  tooltips (`TooltipPositioner` owns their position).
+
 ## [3.5.0] - 2026-10-15
 
 ### Added

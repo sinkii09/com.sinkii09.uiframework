@@ -19,7 +19,8 @@
         "R3.dll",
         "Microsoft.Bcl.TimeProvider.dll",
         "Microsoft.Bcl.AsyncInterfaces.dll",
-        "Newtonsoft.Json.dll"
+        "Newtonsoft.Json.dll",
+        "DOTween.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [

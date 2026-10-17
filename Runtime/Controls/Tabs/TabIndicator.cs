@@ -23,8 +23,11 @@ namespace Sinkii09.UIFramework
             // tween to _indicator, this bare kill silently becomes a corruption site — capture the
             // baseline in Awake and restore it here, in the same method that kills.
             _indicator.DOKill();
+            // Unscaled: tabs live in pause menus too (timeScale 0 froze the indicator mid-slide).
             _indicator.DOAnchorPos(target.anchoredPosition, _duration)
-                .SetEase(Ease.OutCubic);
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true)
+                .SetLink(_indicator.gameObject);
         }
     }
 }

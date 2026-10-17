@@ -1,4 +1,5 @@
 using Cysharp.Threading.Tasks;
+using DG.Tweening;
 using System;
 using System.Threading;
 using UnityEngine;
@@ -27,10 +28,19 @@ namespace Sinkii09.UIFramework
         public CanvasGroup CanvasGroup { get; private set; }
         public RectTransform RectTransform { get; private set; }
 
+        // False for views that must never take raycasts — a tooltip under the cursor strobes, a
+        // full-screen toast host swallows every click beneath it. Enforced on EVERY Show/Hide exit
+        // (success, cancel, fault), so neither a custom IUIAnimator nor a cancelled transition can
+        // leave such a view blocking.
+        protected virtual bool AcceptsInput => true;
+
         protected virtual void Awake()
         {
             CanvasGroup = GetComponent<CanvasGroup>();
             RectTransform = GetComponent<RectTransform>();
+            // A fresh CanvasGroup defaults to interactable — a view that refuses input must not
+            // block even before its first show (with no animator, nothing else would lock it).
+            LockInputUnlessAccepted();
 
             // Editor/development builds only — compiles away entirely in a release player.
             // Runs here rather than in BindViewModel so the report names the offending prefab
@@ -42,6 +52,7 @@ namespace Sinkii09.UIFramework
             // second call costs nothing for well-behaved views. Scene-placed views that the factory
             // never creates (the transition overlay, tooltips) are covered by this call alone.
             UIViewValidator.ValidateSerializedRefs(this);
+            TransitionCompatibilityValidator.Validate(this, _showTransition, _hideTransition);
         }
 
         [Inject]
@@ -64,7 +75,7 @@ namespace Sinkii09.UIFramework
                 await OnShowAsync(cts.Token);
                 // Owned here, not by the animator: a view must not become clickable until its own
                 // setup work (data population, binding wiring) has actually finished.
-                if (CanvasGroup != null)
+                if (CanvasGroup != null && AcceptsInput)
                 {
                     CanvasGroup.interactable = true;
                     CanvasGroup.blocksRaycasts = true;
@@ -87,6 +98,10 @@ namespace Sinkii09.UIFramework
                 IsVisible = false;
                 gameObject.SetActive(false);
                 throw;
+            }
+            finally
+            {
+                LockInputUnlessAccepted();
             }
         }
 
@@ -122,6 +137,39 @@ namespace Sinkii09.UIFramework
                 gameObject.SetActive(false);
                 throw;
             }
+            finally
+            {
+                LockInputUnlessAccepted();
+            }
+        }
+
+        /// <summary>
+        /// Plays a tween this view owns — custom choreography in <c>OnShowAsync</c>/<c>OnHideAsync</c>
+        /// — with the setup that is easy to forget: linked to this GameObject (killed on destroy),
+        /// targeted at this view (a <c>DOKill</c> on a child transform cannot cancel it), unscaled
+        /// time, and cancelled by <paramref name="ct"/> or by this view's destruction.
+        /// Replaces any <c>OnComplete</c>/<c>OnKill</c> already set on <paramref name="tween"/>.
+        /// <c>DOTween.Kill(view)</c> cancels it together with the view's own transition.
+        /// A tween that is already killed or complete returns immediately; a paused tween waits until
+        /// it is played. Pass the ROOT tween or Sequence — a tween already added to a Sequence is not
+        /// supported (DOTween ignores Kill/SetLink on nested tweens, so cancelling it would hang).
+        /// Must be called on a live view, like <see cref="ShowAsync"/>.
+        /// </summary>
+        protected async UniTask PlayOwnedAsync(Tween tween, CancellationToken ct = default)
+        {
+            // A dead or finished tween never fires OnComplete/OnKill again, so awaiting it would hang
+            // forever. IsComplete covers autoKill = false, where a finished tween stays "active".
+            if (tween == null || !tween.IsActive() || tween.IsComplete()) return;
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, destroyCancellationToken);
+            await tween.SetTarget(this).SetLink(gameObject).AwaitAsync(cts.Token);
+        }
+
+        private void LockInputUnlessAccepted()
+        {
+            if (AcceptsInput || CanvasGroup == null) return;
+            CanvasGroup.interactable = false;
+            CanvasGroup.blocksRaycasts = false;
         }
 
         // Called by ShowAsync before SetActive(true) — override to reset visual state (scales, alpha)

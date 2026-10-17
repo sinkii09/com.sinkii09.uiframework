@@ -47,37 +47,13 @@ namespace Sinkii09.UIFramework
             // click above Popup, because the layer canvas carries a GraphicRaycaster. Belt and
             // braces, because these defeat different things: the CanvasGroup covers the subtree,
             // while raycastTarget=false survives a child with its own blocksRaycasts=true group.
-            MakeNonBlocking();
+            // The CanvasGroup half is AcceptsInput (below), enforced by UIViewBase from Awake and on
+            // every Show/Hide exit.
             StripRaycasts(gameObject);
         }
 
-        public override async UniTask ShowAsync(CancellationToken externalCt = default)
-        {
-            try
-            {
-                await base.ShowAsync(externalCt);
-            }
-            finally
-            {
-                // UIViewBase.ShowAsync sets interactable/blocksRaycasts = true once its setup
-                // finishes, and DOTweenUIAnimator's cancel path does the same. Correct for a normal
-                // view, fatal here — so re-assert in a finally, where a cancelled or faulted show
-                // cannot leave the host blocking.
-                MakeNonBlocking();
-            }
-        }
-
-        public override async UniTask HideAsync(CancellationToken externalCt = default)
-        {
-            try
-            {
-                await base.HideAsync(externalCt);
-            }
-            finally
-            {
-                MakeNonBlocking();
-            }
-        }
+        // Sealed: a host that takes raycasts swallows every click beneath it (see Awake).
+        protected sealed override bool AcceptsInput => false;
 
         /// <summary>
         /// Returns the reusable row for <paramref name="index"/>, instantiating it on first use.
@@ -106,13 +82,6 @@ namespace Sinkii09.UIFramework
 
         // Not an override — UIViewBase declares no OnDestroy, so there is no base call to make.
         private void OnDestroy() => Destroyed?.Invoke();
-
-        private void MakeNonBlocking()
-        {
-            if (CanvasGroup == null) return;
-            CanvasGroup.interactable = false;
-            CanvasGroup.blocksRaycasts = false;
-        }
 
         // protected, not internal: subclasses live in game assemblies, and internal would make this
         // unreachable for exactly the callers that need it for their own runtime-spawned content.

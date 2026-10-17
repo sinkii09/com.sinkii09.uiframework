@@ -42,41 +42,13 @@ namespace Sinkii09.UIFramework
             // pointer "exits" the anchor beneath it, the tooltip hides, the pointer re-enters, and
             // it strobes. Belt and braces, because these defeat different things: the CanvasGroup
             // covers the subtree, while raycastTarget=false survives a child that carries its own
-            // CanvasGroup with blocksRaycasts=true.
-            MakeNonBlocking();
+            // CanvasGroup with blocksRaycasts=true. The CanvasGroup half is AcceptsInput (below),
+            // enforced by UIViewBase from Awake and on every Show/Hide exit.
             StripRaycasts(gameObject);
         }
 
-        public override async UniTask ShowAsync(CancellationToken externalCt = default)
-        {
-            try
-            {
-                await base.ShowAsync(externalCt);
-            }
-            finally
-            {
-                // UIViewBase.ShowAsync sets interactable/blocksRaycasts = true once its own setup
-                // finishes (UIViewBase.cs:54-56), and DOTweenUIAnimator's cancel path does the
-                // same. Correct for a normal view, fatal for a tooltip — so re-assert afterwards,
-                // in a finally so a cancelled or faulted show cannot leave it blocking either.
-                MakeNonBlocking();
-            }
-        }
-
-        public override async UniTask HideAsync(CancellationToken externalCt = default)
-        {
-            try
-            {
-                await base.HideAsync(externalCt);
-            }
-            finally
-            {
-                // DOTweenUIAnimator's HideAsync cancel path restores interactable/blocksRaycasts
-                // to true (DOTweenUIAnimator.cs:101-102) on its way out. A cancelled hide would
-                // otherwise leave a re-shown tooltip raycast-blocking and back in the flicker loop.
-                MakeNonBlocking();
-            }
-        }
+        // Sealed: a subclass turning input back on would re-enter the flicker loop above.
+        protected sealed override bool AcceptsInput => false;
 
         // Strips raycasts from a subtree. Call this for stat rows and any other content a subclass
         // instantiates at runtime, which never passed through Awake's sweep.
@@ -86,13 +58,6 @@ namespace Sinkii09.UIFramework
         {
             foreach (var graphic in target.GetComponentsInChildren<Graphic>(true))
                 graphic.raycastTarget = false;
-        }
-
-        private void MakeNonBlocking()
-        {
-            if (CanvasGroup == null) return;
-            CanvasGroup.interactable = false;
-            CanvasGroup.blocksRaycasts = false;
         }
 
         // Sealed, and that is load-bearing: UIViewBase declares this `internal abstract`, so

@@ -1,3 +1,4 @@
+using DG.Tweening;
 using UnityEngine;
 
 namespace Sinkii09.UIFramework
@@ -11,8 +12,30 @@ namespace Sinkii09.UIFramework
     {
         private const float MinAxis = 0.01f;
 
+        // The ONLY sanctioned way for a juice component to stop a scale tween. A bare DOKill leaves
+        // scale wherever the kill landed and nothing else ever rewrites it, so kill and restore must
+        // never be separated.
+        public static void KillAndRestore(Transform target, Vector3 baseScale)
+        {
+            if (target == null) return;
+
+            target.DOKill();
+            target.localScale = baseScale;
+        }
+
         public static Vector3 CaptureBase(Transform target, Object context)
         {
+            // A view root's scale belongs to its show/hide transition. Feedback there both fights the
+            // transition every frame and can capture a mid-transition scale (0.85…) as its "base",
+            // which every later restore then reapplies forever — the near-zero guard below can't see it.
+            if (target.GetComponent<UIViewBase>() != null)
+            {
+                Debug.LogWarning(
+                    $"[UIFramework] {context.GetType().Name} on '{context.name}' targets a UIViewBase root. " +
+                    "Show/hide transitions own a view root's scale — put the feedback on a child visual.",
+                    context);
+            }
+
             var scale = target.localScale;
             if (Mathf.Abs(scale.x) >= MinAxis && Mathf.Abs(scale.y) >= MinAxis) return scale;
 

@@ -24,5 +24,11 @@ namespace Sinkii09.UIFramework
         // Transitions are shared ScriptableObject assets across views — this must stay stateless.
         // No transition may cache per-view state in a field to implement this.
         public virtual void RestoreOnCancel(UIViewBase view) { }
+
+        // The canonical resting scale every scale-driving transition settles on and restores to.
+        protected static void ResetScale(UIViewBase view)
+        {
+            if (view != null) view.transform.localScale = Vector3.one;
+        }
     }
 }
