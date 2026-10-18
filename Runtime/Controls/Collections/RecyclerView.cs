@@ -119,6 +119,7 @@ namespace Sinkii09.UIFramework
             try
             {
                 ReleaseAllShown();
+                DisposePrefetch();
             }
             finally
             {
@@ -169,6 +170,7 @@ namespace Sinkii09.UIFramework
             try
             {
                 ReleaseAllShown();
+                ResetPrefetch();
                 _provider = provider;
 
                 // Pump here or the order of SetItemCount/SetCellProvider silently matters: setting
@@ -215,6 +217,7 @@ namespace Sinkii09.UIFramework
                 _offsets = rebuilt;
 
                 ReleaseAllShown();
+                ResetPrefetch();
                 ApplyContentSize();
 
                 if (resetPosition) ScrollToIndexCore(0, 0f);
@@ -253,6 +256,7 @@ namespace Sinkii09.UIFramework
                 // Not just a pump: the content rect and every live cell's cached offset are computed
                 // from the old sizes, and the pump re-reads neither.
                 ReleaseAllShown();
+                RebaselinePrefetch();
                 ApplyContentSize();
                 PumpCore();
             }
@@ -293,6 +297,7 @@ namespace Sinkii09.UIFramework
                 _offsets = rebuilt;
 
                 ReleaseAllShown();
+                RebaselinePrefetch();
                 ApplyContentSize();
                 PumpCore();
             }
@@ -327,6 +332,7 @@ namespace Sinkii09.UIFramework
                 _offsets = BuildOffsets(_sizeProvider, _settings.CrossAxisCount, _itemCount);
 
                 ReleaseAllShown();
+                RebaselinePrefetch();
                 ApplyContentSize();
                 PumpCore();
             }
@@ -478,6 +484,7 @@ namespace Sinkii09.UIFramework
             try
             {
                 ReleaseAllShown();
+                ResetPrefetch();
                 PumpCore();
             }
             finally

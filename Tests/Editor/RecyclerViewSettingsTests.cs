@@ -133,5 +133,33 @@ namespace Sinkii09.UIFramework.Tests.Editor
             Assert.That(settings.CrossSpacing, Is.Zero);
             Assert.DoesNotThrow(() => settings.Validate());
         }
+
+        /// <summary>Off by default — and an asset serialized before v3.8 carries no key, which must read as the same off.</summary>
+        [Test]
+        public void PrefetchDistance_DefaultsToZero_AndIsValid()
+        {
+            Assert.That(Build().PrefetchDistance, Is.Zero);
+            Assert.That(BuildWithoutGridKeys().PrefetchDistance, Is.Zero);
+            Assert.DoesNotThrow(() => WithPrefetchDistance(600f).Validate());
+        }
+
+        [TestCase(-1f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        [TestCase(float.NegativeInfinity)]
+        public void Validate_RejectsNegativeOrNonFinitePrefetchDistance(float distance)
+        {
+            Assert.Throws<ArgumentException>(() => WithPrefetchDistance(distance).Validate());
+        }
+
+        /// <summary>Reflection, not JSON: JSON has no spelling for NaN or infinity.</summary>
+        private static RecyclerViewSettings WithPrefetchDistance(float distance)
+        {
+            RecyclerViewSettings settings = Build();
+            typeof(RecyclerViewSettings)
+                .GetField("_prefetchDistance", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                .SetValue(settings, distance);
+            return settings;
+        }
     }
 }

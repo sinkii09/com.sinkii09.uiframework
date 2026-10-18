@@ -46,6 +46,7 @@ namespace Sinkii09.UIFramework.Tests
 
         /// <param name="activate">False leaves the view before its Awake, as inside an inactive panel.</param>
         /// <param name="inertia">True lets the ScrollRect coast on its own in LateUpdate, like a fling.</param>
+        /// <param name="prefetchDistance">The serialized prefetch distance; 0 leaves prefetch off.</param>
         public static RecyclerViewHarness Build(
             float viewportSize = 500f,
             float cellSize = 100f,
@@ -56,7 +57,8 @@ namespace Sinkii09.UIFramework.Tests
             int crossAxisCount = 1,
             float crossSpacing = 0f,
             bool activate = true,
-            bool inertia = false)
+            bool inertia = false,
+            float prefetchDistance = 0f)
         {
             var harness = new RecyclerViewHarness();
 
@@ -90,7 +92,7 @@ namespace Sinkii09.UIFramework.Tests
             SetField(harness.View, "_direction", direction);
             SetField(harness.View, "_cellPrefabs", prefabs);
             SetField(harness.View, "_settings",
-                NewSettings(cellSize, spacing, prewarmCount, crossAxisCount, crossSpacing));
+                NewSettings(cellSize, spacing, prewarmCount, crossAxisCount, crossSpacing, prefetchDistance));
 
             if (activate) harness.Activate();
             return harness;
@@ -214,7 +216,8 @@ namespace Sinkii09.UIFramework.Tests
         }
 
         private static RecyclerViewSettings NewSettings(
-            float cellSize, float spacing, int prewarmCount, int crossAxisCount, float crossSpacing)
+            float cellSize, float spacing, int prewarmCount, int crossAxisCount, float crossSpacing,
+            float prefetchDistance)
         {
             var settings = new RecyclerViewSettings();
             SetField(settings, "_cellSize", cellSize);
@@ -222,6 +225,7 @@ namespace Sinkii09.UIFramework.Tests
             SetField(settings, "_prewarmCount", prewarmCount);
             SetField(settings, "_crossAxisCount", crossAxisCount);
             SetField(settings, "_crossSpacing", crossSpacing);
+            SetField(settings, "_prefetchDistance", prefetchDistance);
             return settings;
         }
 

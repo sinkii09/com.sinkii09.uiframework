@@ -77,6 +77,11 @@ namespace Sinkii09.UIFramework
                 // longer exists. Flushing twice on the normal path costs nothing.
                 _pool.FlushRecycled();
                 RebuildShownIndices();
+
+                // Last, and here rather than after the try: a provider throw must not leave a hint
+                // outstanding for an index the window now shows. Never throws — every callback is
+                // caught — so it cannot replace the provider's exception.
+                UpdatePrefetch();
             }
         }
 

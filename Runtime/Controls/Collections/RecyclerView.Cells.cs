@@ -19,6 +19,8 @@ namespace Sinkii09.UIFramework
 
         private CellHandle CreateAt(int index)
         {
+            // Before the bind: calling the provider ends a prefetch hint even when it throws.
+            NotePrefetchConsumed(index);
             RecyclerCell cell = Bind(index);
 
             CellHandle handle = _handlePool.Count > 0 ? _handlePool.Pop() : new CellHandle();

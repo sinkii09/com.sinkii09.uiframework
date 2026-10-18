@@ -2,6 +2,46 @@
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-10-18
+
+A prefetch hook for `RecyclerView`: the consumer learns which indices are about to be bound, so it
+can warm its own cache before a cell needs the data. Off by default — existing views are unchanged.
+
+### Added
+- **`RecyclerView.SetPrefetchHandler(onPrefetch, onCancelPrefetch = null)`** — both callbacks take
+  `(firstIndex, count)`, an ascending run. `onPrefetch` announces the items within
+  `PrefetchDistance` beyond the realized window, on the side the window last moved; `onCancelPrefetch`
+  withdraws announced items that are no longer wanted (the list reversed, jumped, or the band shrank).
+  Every announced index ends in exactly one of two ways: the cell provider is called for it (the bind
+  takes the hint over and the view never cancels it afterwards — even if the provider throws), or it
+  is cancelled. Only newly entered indices are announced; at rest there are no calls. Grids announce
+  whole rows. Callbacks run inside the busy guard (a mutating call from one is refused) and are
+  caught and logged — a hint never breaks the list. `null` turns prefetch off and cancels what is
+  outstanding; calling it again re-announces. Callable before `Awake`; destroying the view cancels.
+- **`RecyclerViewSettings.PrefetchDistance`** (serialized, `[Min(0)]`, default `0` = off; offset-space
+  units measured from the realized window, which already reaches `CreateDistance` past the viewport).
+  `Validate()` rejects negative and non-finite values. Read-only `RecyclerView.PrefetchDistance`.
+- **`RecyclerView.ScrollVelocity`** — signed scroll speed in offset-space units/s, positive toward
+  later items in every `ScrollDirection`. It is the ScrollRect's own velocity: `0` with inertia off,
+  for mouse-wheel steps and programmatic jumps; `0` before initialization and after destruction. Use
+  it to hold off loads during a hard fling.
+### Changed
+- **Inspector: the RecyclerView `Settings` block is grouped** under headers that carry the unit and
+  the rule — `Cells · px`, `Grid · 1 = plain list`, `Cell window · px past viewport · Recycle > Create`,
+  `Pool`, `Prefetch · px · 0 = off`. `Create Distance` now sits above `Recycle Distance` (serialized
+  by name; existing assets keep their values).
+- `RecyclerViewSettings` tooltips rewritten to say what each value controls, its unit and the visible
+  effect of raising it; the design rationale they used to carry moved into code comments. An EditMode
+  test fails if a serialized setting has no tooltip.
+
+### Notes
+- `SetItemCount`, `SetCellProvider` and `RefreshAll` cancel every outstanding hint and the next pump
+  re-announces (the data behind an index may have changed). Layout changes (`SetCrossAxisCount`,
+  `SetItemSizeProvider`, `RefreshSizes`) do not reset — the diff cancels only what leaves the band.
+- Direction is read from the window's own movement, so it inherits the create/recycle hysteresis
+  instead of flipping on scroll jitter. At the list's ends it is decided outright.
+- A disabled view keeps its outstanding hints until it is re-enabled or destroyed.
+
 ## [3.7.0] - 2026-10-18
 
 RecyclerView hardening, and first-class support for cells whose content loads asynchronously.

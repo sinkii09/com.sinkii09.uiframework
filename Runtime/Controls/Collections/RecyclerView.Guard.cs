@@ -4,7 +4,8 @@ namespace Sinkii09.UIFramework
 {
     /// <summary>
     /// Re-entrancy guard. Every window in which consumer code runs — the cell provider,
-    /// <see cref="RecyclerCell.OnRecycled"/>, the size provider, a <c>ForEachShownCell</c> action — is
+    /// <see cref="RecyclerCell.OnRecycled"/>, the size provider, a <c>ForEachShownCell</c> action, a
+    /// prefetch handler — is
     /// a busy window, and a mutating call made from inside one is refused rather than allowed to
     /// rewrite the shown-cell window while it is being walked.
     ///
@@ -23,6 +24,7 @@ namespace Sinkii09.UIFramework
         private const string CellCallbacks = "a cell provider or OnRecycled";
         private const string SizeCallbacks = "a size provider";
         private const string VisitCallbacks = "a ForEachShownCell action";
+        private const string PrefetchCallbacks = "a prefetch handler";
 
         private int _busyDepth;
         private string _busySource;
