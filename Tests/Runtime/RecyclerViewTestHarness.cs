@@ -39,6 +39,13 @@ namespace Sinkii09.UIFramework.Tests
         /// <summary>Live cells that exist under the content root, however they were obtained.</summary>
         public int InstantiatedCells => Content.GetComponentsInChildren<TestCell>(true).Length;
 
+        /// <summary>Cells actually on screen — a pooled cell is inactive, a leaked one is not.</summary>
+        public int ActiveCells => Content.GetComponentsInChildren<TestCell>(false).Length;
+
+        public ScrollRect ScrollRect => Root.GetComponent<ScrollRect>();
+
+        /// <param name="activate">False leaves the view before its Awake, as inside an inactive panel.</param>
+        /// <param name="inertia">True lets the ScrollRect coast on its own in LateUpdate, like a fling.</param>
         public static RecyclerViewHarness Build(
             float viewportSize = 500f,
             float cellSize = 100f,
@@ -47,7 +54,9 @@ namespace Sinkii09.UIFramework.Tests
             int prewarmCount = 0,
             int prefabCount = 1,
             int crossAxisCount = 1,
-            float crossSpacing = 0f)
+            float crossSpacing = 0f,
+            bool activate = true,
+            bool inertia = false)
         {
             var harness = new RecyclerViewHarness();
 
@@ -61,7 +70,7 @@ namespace Sinkii09.UIFramework.Tests
             scroll.viewport = harness.Viewport;
             scroll.content = harness.Content;
             scroll.movementType = ScrollRect.MovementType.Unrestricted;
-            scroll.inertia = false;
+            scroll.inertia = inertia;
 
             // The "prefab" is just an inactive template Instantiate() can copy. More than one gives
             // the pool separate per-id tiers, which is the only way a recycled cell can arrive
@@ -83,9 +92,15 @@ namespace Sinkii09.UIFramework.Tests
             SetField(harness.View, "_settings",
                 NewSettings(cellSize, spacing, prewarmCount, crossAxisCount, crossSpacing));
 
-            harness.Root.SetActive(true); // Awake -> OnInitialize
+            if (activate) harness.Activate();
             return harness;
         }
+
+        /// <summary>Runs the view's Awake → OnInitialize. Only needed after <c>Build(activate: false)</c>.</summary>
+        public void Activate() => Root.SetActive(true);
+
+        /// <summary>Swaps the serialized prefab array. Only meaningful before <see cref="Activate"/>.</summary>
+        public void ReplacePrefabs(params RecyclerCell[] prefabs) => SetField(View, "_cellPrefabs", prefabs);
 
         /// <summary>
         /// Real rendered size of the cell bound to a data index, along the scroll axis. Reads the

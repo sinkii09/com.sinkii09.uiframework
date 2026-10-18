@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace Sinkii09.UIFramework
@@ -10,34 +11,88 @@ namespace Sinkii09.UIFramework
     {
         private void Update() => Pump();
 
+        /// <summary>
+        /// ScrollRect moves the content in its LateUpdate — inertia, elasticity — after this view's
+        /// Update pump has run, so on its own the frame renders with a window built for LAST frame's
+        /// position. While a frame's travel stays inside the create band nobody sees it; past it (a
+        /// hard fling, a 30 fps device, one frame hitch) the leading edge renders empty.
+        /// <c>onValueChanged</c> fires from that same LateUpdate, right after the move. Update still
+        /// pumps, for viewport resizes and anything else that moves nothing.
+        ///
+        /// <para>A consumer calling <c>onValueChanged.RemoveAllListeners()</c> on this ScrollRect
+        /// removes this hook too and the lag comes back silently; listeners added in the Inspector
+        /// run before it and see the window for the previous position.</para>
+        /// </summary>
+        private void OnScrollMoved(Vector2 _)
+        {
+            // The ScrollRect still raises the event while this component is disabled; Update does not
+            // pump then either.
+            if (!isActiveAndEnabled) return;
+
+            // An exception escaping UnityEvent.Invoke skips ScrollRect.UpdatePrevData, so the event
+            // would fire again every frame. Report a failing provider here instead.
+            try
+            {
+                Pump();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception, this);
+            }
+        }
+
+        /// <summary>
+        /// The per-frame entry. Skips a tick that lands inside a busy window — consumer code calling
+        /// back in is mid-walk, and the public method that opened the window pumps when it finishes.
+        /// </summary>
         private void Pump()
         {
-            // Re-entrancy: a provider that mutates the list while we are walking it would corrupt
-            // the window mid-iteration. Bail rather than recurse.
-            if (_inPump || _provider == null || _content == null) return;
+            if (IsBusy) return;
 
-            _inPump = true;
+            string previous = EnterBusy(CellCallbacks);
             try
             {
                 PumpCore();
             }
             finally
             {
-                _inPump = false;
+                ExitBusy(previous);
             }
         }
 
+        /// <summary>One pump. Callers hold the busy scope — <see cref="Pump"/> or a public method.</summary>
         private void PumpCore()
+        {
+            // Unity's == on the content: torn down with its scene while the view is still alive.
+            if (_provider == null || !IsInitialized || _content == null) return;
+
+            try
+            {
+                PumpWindow();
+            }
+            finally
+            {
+                // On a throw too. A provider failing mid-reseed leaves every old cell staged — still
+                // active, still at its old position — and ShownIndices describing a window that no
+                // longer exists. Flushing twice on the normal path costs nothing.
+                _pool.FlushRecycled();
+                RebuildShownIndices();
+            }
+        }
+
+        private void PumpWindow()
         {
             _tick++;
 
             if (_itemCount <= 0)
             {
                 ReleaseAllShownInternal();
-                _pool.FlushRecycled();
-                _shownIndices.Clear();
                 return;
             }
+
+            // Applied here rather than when it was asked for: before initialization there was no
+            // viewport to measure, and with no items there was nothing to aim at.
+            if (_hasPendingScroll) ScrollToIndexCore(_pendingScrollIndex, _pendingScrollAlignment);
 
             float viewportStart = _axis.ViewportStart(_content.anchoredPosition);
             float viewportSize = _axis.SizeOf(_viewport.rect);
@@ -73,8 +128,6 @@ namespace Sinkii09.UIFramework
                 Apply(action);
             }
 
-            _pool.FlushRecycled();
-            RebuildShownIndices();
             VerifyMeasurements();
         }
 
@@ -132,21 +185,6 @@ namespace Sinkii09.UIFramework
         {
             _shownIndices.Clear();
             for (int i = 0; i < _shown.Count; i++) _shownIndices.Add(_shown[i].Index);
-        }
-
-        private bool RejectReentrant(string caller)
-        {
-            // Two distinct windows during which the view is mid-build. The pump is the long-standing
-            // one; the offset rebuild is separate because the size provider runs outside the pump,
-            // so _inPump alone leaves that path unguarded.
-            if (!_inPump && !_rebuildingOffsets) return false;
-
-            string from = _inPump ? "a cell provider" : "a size provider";
-            Debug.LogError(
-                $"[RecyclerView] '{name}': {caller} was called from inside {from}. " +
-                "Mutating the list while it is being built is not supported — the call was ignored.",
-                this);
-            return true;
         }
 
         /// <summary>

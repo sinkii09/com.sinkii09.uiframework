@@ -18,6 +18,10 @@ namespace Sinkii09.UIFramework
     /// <see cref="SetItemSizeProvider"/>. Because a size is known before its cell is realised, the
     /// content extent and every position are exact from the first frame — the list never shifts
     /// under the user to correct an estimate. The cost is that a cell may not size itself.</para>
+    ///
+    /// <para>Every public method may be called before the view's <c>Awake</c> (a list inside an
+    /// inactive panel): the count, providers and a requested scroll are kept and take effect once
+    /// it initializes.</para>
     /// </summary>
     [RequireComponent(typeof(ScrollRect))]
     public partial class RecyclerView : UIControlBase
@@ -44,15 +48,21 @@ namespace Sinkii09.UIFramework
         private int _tick;
         private int _pendingPrefabId = -1;
         private RecyclerCell _pendingCell;
-        private bool _inPump;
         private bool _binding;
-        private bool _rebuildingOffsets;
+        private int _bindingIndex = -1;
 
         /// <summary>
         /// Where every item sits. Initialized non-null so <see cref="TotalSize"/> answers before
         /// <c>OnInitialize</c> — it is public, and another component's <c>Awake</c> can reach it.
         /// </summary>
         private IItemOffsets _offsets = UniformOffsets.Empty;
+
+        /// <summary>
+        /// The pool is created in <c>OnInitialize</c> and dropped in <c>OnDispose</c>, so it doubles
+        /// as the flag — a call arriving after the view was destroyed (an awaited load finishing late)
+        /// takes the same harmless path as one arriving before it initialized.
+        /// </summary>
+        private bool IsInitialized => _pool != null;
 
         /// <summary>Total extent of the list along the scroll axis.</summary>
         public float TotalSize => _offsets.TotalSize;
@@ -76,6 +86,7 @@ namespace Sinkii09.UIFramework
         protected override void OnInitialize()
         {
             _settings.Validate();
+            ValidateCellPrefabs();
 
             _scrollRect = GetComponent<ScrollRect>();
             _content = _scrollRect.content;
@@ -87,53 +98,132 @@ namespace Sinkii09.UIFramework
             _axis = ScrollAxis.From(_direction);
             _scrollRect.horizontal = _axis.Horizontal;
             _scrollRect.vertical = !_axis.Horizontal;
+            _scrollRect.onValueChanged.AddListener(OnScrollMoved);
 
             ContentLayout.ConfigureRect(_content, _axis);
 
             _pool = new CellPool(Mathf.Max(_cellPrefabs.Length, 1), CreateCellInstance);
             if (_cellPrefabs.Length > 0) _pool.Prewarm(0, _settings.PrewarmCount);
+
+            // Last, once the pool exists, so a size provider throwing here still leaves a view the
+            // pump can run against. A count set before Awake built its table against settings
+            // Validate had not checked yet, and could not size a content rect that was not known.
+            _offsets = BuildOffsets(_sizeProvider, _settings.CrossAxisCount, _itemCount);
+            ApplyContentSize();
         }
 
         protected override void OnDispose()
         {
-            ReleaseAllShown();
+            // OnRecycled runs below — consumer code, refused like anywhere else if it mutates.
+            string previous = EnterBusy(CellCallbacks);
+            try
+            {
+                ReleaseAllShown();
+            }
+            finally
+            {
+                ExitBusy(previous);
+            }
+
+            if (_scrollRect != null) _scrollRect.onValueChanged.RemoveListener(OnScrollMoved);
             _pool?.DestroyAll();
+            _pool = null;
             _provider = null;
             _sizeProvider = null;
         }
 
         /// <summary>
+        /// Authoring errors, refused at initialization rather than at the first bind that happens to
+        /// reach the slot. Unity's <c>==</c>, so an unassigned or destroyed prefab counts as empty.
+        /// </summary>
+        private void ValidateCellPrefabs()
+        {
+            for (int id = 0; id < _cellPrefabs.Length; id++)
+            {
+                RecyclerCell prefab = _cellPrefabs[id];
+
+                if (prefab == null)
+                    throw new InvalidOperationException(
+                        $"[RecyclerView] '{name}': cell prefab slot {id} is empty.");
+
+                if (!(prefab.transform is RectTransform))
+                    throw new InvalidOperationException(
+                        $"[RecyclerView] '{name}': cell prefab '{prefab.name}' (id {id}) has no " +
+                        "RectTransform. Cells are placed as UI and must be built on one.");
+            }
+        }
+
+        /// <summary>
         /// Sets the callback that binds a cell for a data index. The callback must obtain its cell
         /// from <see cref="RentCell{T}"/> and must never return <c>null</c>.
+        ///
+        /// <para>Cells already on screen are re-bound through the new provider — they were bound by
+        /// the old one and would otherwise keep showing its data until each scrolled out.</para>
         /// </summary>
         public void SetCellProvider(Func<int, RecyclerCell> provider)
         {
             if (provider == null) throw new ArgumentNullException(nameof(provider));
             if (RejectReentrant(nameof(SetCellProvider))) return;
 
-            _provider = provider;
+            string previous = EnterBusy(CellCallbacks);
+            try
+            {
+                ReleaseAllShown();
+                _provider = provider;
 
-            // Pump here or the order of SetItemCount/SetCellProvider silently matters: setting the
-            // count first leaves the list blank until something else happens to tick it.
-            Pump();
+                // Pump here or the order of SetItemCount/SetCellProvider silently matters: setting
+                // the count first leaves the list blank until something else happens to tick it.
+                PumpCore();
+            }
+            finally
+            {
+                ExitBusy(previous);
+            }
         }
 
         /// <summary>
         /// Declares how many items exist. Recycles every live cell and rebuilds the window, so the
         /// provider is re-asked for everything currently on screen.
+        ///
+        /// <para>The size provider is asked for the new count before anything changes: if it throws,
+        /// <see cref="ItemCount"/> and the layout are left exactly as they were. It runs while
+        /// <see cref="ItemCount"/> still reports the <b>old</b> count, so it must take its range
+        /// from its own data rather than from the view.</para>
         /// </summary>
         public void SetItemCount(int count, bool resetPosition = false)
         {
             if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
             if (RejectReentrant(nameof(SetItemCount))) return;
 
-            _itemCount = count;
-            RebuildOffsets();
-            ReleaseAllShown();
-            ApplyContentSize();
+            if (!IsInitialized)
+            {
+                // Built now so TotalSize answers, rebuilt in OnInitialize against validated settings.
+                IItemOffsets early = BuildOffsets(_sizeProvider, _settings.CrossAxisCount, count);
+                _itemCount = count;
+                _offsets = early;
+                if (resetPosition) RequestScroll(0, 0f);
+                return;
+            }
 
-            if (resetPosition) ScrollToIndex(0, 0f);
-            Pump();
+            string previous = EnterBusy(CellCallbacks);
+            try
+            {
+                // Build first, adopt second — a throwing size provider used to leave the count
+                // changed and the table not, so every later pump indexed past the table's end.
+                IItemOffsets rebuilt = BuildOffsets(_sizeProvider, _settings.CrossAxisCount, count);
+                _itemCount = count;
+                _offsets = rebuilt;
+
+                ReleaseAllShown();
+                ApplyContentSize();
+
+                if (resetPosition) ScrollToIndexCore(0, 0f);
+                PumpCore();
+            }
+            finally
+            {
+                ExitBusy(previous);
+            }
         }
 
         /// <summary>
@@ -149,20 +239,27 @@ namespace Sinkii09.UIFramework
         {
             if (RejectReentrant(nameof(SetItemSizeProvider))) return;
 
-            // Build first, adopt second. Assigning the field up front and letting RebuildOffsets read
-            // it means a provider that throws is still installed afterwards, so every later
-            // SetItemCount re-invokes it and throws too — the view never recovers. Preserving
-            // _offsets is not enough on its own.
-            IItemOffsets rebuilt = BuildOffsets(sizeProvider, _settings.CrossAxisCount);
+            string previous = EnterBusy(CellCallbacks);
+            try
+            {
+                // Build first, adopt second. Assigning the field up front means a provider that
+                // throws is still installed afterwards, so every later SetItemCount re-invokes it and
+                // throws too — the view never recovers. Preserving _offsets is not enough on its own.
+                IItemOffsets rebuilt = BuildOffsets(sizeProvider, _settings.CrossAxisCount, _itemCount);
 
-            _sizeProvider = sizeProvider;
-            _offsets = rebuilt;
+                _sizeProvider = sizeProvider;
+                _offsets = rebuilt;
 
-            // Not just Pump(): the content rect and every live cell's cached offset are computed
-            // from the old sizes, and Pump() re-reads neither.
-            ReleaseAllShown();
-            ApplyContentSize();
-            Pump();
+                // Not just a pump: the content rect and every live cell's cached offset are computed
+                // from the old sizes, and the pump re-reads neither.
+                ReleaseAllShown();
+                ApplyContentSize();
+                PumpCore();
+            }
+            finally
+            {
+                ExitBusy(previous);
+            }
         }
 
         /// <summary>
@@ -183,19 +280,26 @@ namespace Sinkii09.UIFramework
             if (RejectReentrant(nameof(SetCrossAxisCount))) return;
             if (count == _settings.CrossAxisCount) return;
 
-            // Build first, adopt second — the same rule as SetItemSizeProvider, and it applies here
-            // for a sharper reason: a size provider that throws partway would otherwise leave the
-            // column count already changed while the offset table is still the old one, so the next
-            // layout would place columns against list offsets and overlap them. Nothing after the
-            // throw would run to put that right.
-            IItemOffsets rebuilt = BuildOffsets(_sizeProvider, count);
+            string previous = EnterBusy(CellCallbacks);
+            try
+            {
+                // Build first, adopt second — the same rule as SetItemSizeProvider, and it applies
+                // here for a sharper reason: a size provider that throws partway would otherwise leave
+                // the column count already changed while the offset table is still the old one, so
+                // the next layout would place columns against list offsets and overlap them.
+                IItemOffsets rebuilt = BuildOffsets(_sizeProvider, count, _itemCount);
 
-            _settings.OverrideCrossAxisCount(count);
-            _offsets = rebuilt;
+                _settings.OverrideCrossAxisCount(count);
+                _offsets = rebuilt;
 
-            ReleaseAllShown();
-            ApplyContentSize();
-            Pump();
+                ReleaseAllShown();
+                ApplyContentSize();
+                PumpCore();
+            }
+            finally
+            {
+                ExitBusy(previous);
+            }
         }
 
         /// <summary>
@@ -217,37 +321,37 @@ namespace Sinkii09.UIFramework
             if (_sizeProvider == null) return;
             if (RejectReentrant(nameof(RefreshSizes))) return;
 
-            IItemOffsets rebuilt = BuildOffsets(_sizeProvider, _settings.CrossAxisCount);
-            _offsets = rebuilt;
+            string previous = EnterBusy(CellCallbacks);
+            try
+            {
+                _offsets = BuildOffsets(_sizeProvider, _settings.CrossAxisCount, _itemCount);
 
-            ReleaseAllShown();
-            ApplyContentSize();
-            Pump();
+                ReleaseAllShown();
+                ApplyContentSize();
+                PumpCore();
+            }
+            finally
+            {
+                ExitBusy(previous);
+            }
         }
 
         /// <summary>
-        /// Rebuilds the offset table from the current count and size provider.
+        /// Produces the table for <paramref name="itemCount"/> items under
+        /// <paramref name="sizeProvider"/>, or throws having changed nothing. Callers assign the
+        /// result — that is what keeps a throwing provider from leaving the view in a state it cannot
+        /// be talked out of.
         ///
-        /// <para>The size provider is consumer code running outside the pump, so it needs its own
-        /// reentrancy guard — and that guard must cover <b>only</b> this build. Holding it across the
-        /// caller's follow-up <c>Pump()</c> would make the pump reject itself and leave the list
-        /// silently empty.</para>
+        /// <para>The count is a parameter, not the field, so a caller can build for a count it has not
+        /// adopted yet.</para>
         /// </summary>
-        private void RebuildOffsets() => _offsets = BuildOffsets(_sizeProvider, _settings.CrossAxisCount);
-
-        /// <summary>
-        /// Produces the table for the current count under <paramref name="sizeProvider"/>, or throws
-        /// having changed nothing. Callers assign the result — that is what keeps a throwing provider
-        /// from leaving the view in a state it cannot be talked out of.
-        /// </summary>
-        private IItemOffsets BuildOffsets(Func<int, float> sizeProvider, int crossAxisCount)
+        private IItemOffsets BuildOffsets(Func<int, float> sizeProvider, int crossAxisCount, int itemCount)
         {
-
-            // The inner table is built over ROWS. Handing it the item count instead makes the
-            // content rect that many times too tall, with nothing on screen to show for it.
+            // The inner table is built over ROWS. Handing it the item count instead makes the content
+            // rect that many times too tall, with nothing on screen to show for it.
             int strideCount = crossAxisCount <= 1
-                ? _itemCount
-                : (_itemCount + crossAxisCount - 1) / crossAxisCount;
+                ? itemCount
+                : (itemCount + crossAxisCount - 1) / crossAxisCount;
 
             IItemOffsets strides;
 
@@ -257,19 +361,21 @@ namespace Sinkii09.UIFramework
             }
             else
             {
-                _rebuildingOffsets = true;
+                // The size provider is consumer code running outside the pump; this scope is what
+                // refuses a provider that mutates the list it is being asked about.
+                string previous = EnterBusy(SizeCallbacks);
                 try
                 {
                     strides = new PrefixSumOffsets(
-                        strideCount, RowSizeFrom(sizeProvider, crossAxisCount), _settings.Spacing);
+                        strideCount, RowSizeFrom(sizeProvider, crossAxisCount, itemCount), _settings.Spacing);
                 }
                 finally
                 {
-                    _rebuildingOffsets = false;
+                    ExitBusy(previous);
                 }
             }
 
-            return crossAxisCount <= 1 ? strides : new GridOffsets(strides, crossAxisCount, _itemCount);
+            return crossAxisCount <= 1 ? strides : new GridOffsets(strides, crossAxisCount, itemCount);
         }
 
         /// <summary>
@@ -285,14 +391,14 @@ namespace Sinkii09.UIFramework
         /// <para>At one column this returns the caller's own delegate untouched, so the single-column
         /// path is not merely equivalent — it is the same object making the same calls.</para>
         /// </summary>
-        private Func<int, float> RowSizeFrom(Func<int, float> itemSize, int crossAxisCount)
+        private Func<int, float> RowSizeFrom(Func<int, float> itemSize, int crossAxisCount, int itemCount)
         {
             if (crossAxisCount <= 1) return itemSize;
 
             return row =>
             {
                 int first = row * crossAxisCount;
-                int end = Math.Min(first + crossAxisCount, _itemCount);
+                int end = Math.Min(first + crossAxisCount, itemCount);
 
                 float tallest = 0f;
                 for (int i = first; i < end; i++)
@@ -343,10 +449,20 @@ namespace Sinkii09.UIFramework
                     $"[RecyclerView] '{name}': the cell provider rented more than one cell for a " +
                     "single index. Only the returned cell is tracked; the rest leak.");
 
-            RecyclerCell cell = _pool.Rent(prefabId);
-            if (cell is not T typed)
-                throw new InvalidOperationException(
-                    $"Cell prefab {prefabId} is a {cell.GetType().Name}, not a {typeof(T).Name}.");
+            // Checked against the PREFAB, before renting: the same check made on the rented instance
+            // fails with that instance already active and tracked by nothing.
+            if (_cellPrefabs[prefabId] is not T)
+            {
+                RecyclerCell prefab = _cellPrefabs[prefabId];
+                throw new InvalidOperationException(prefab == null
+                    ? $"[RecyclerView] '{name}': cell prefab slot {prefabId} is empty."
+                    : $"Cell prefab {prefabId} is a {prefab.GetType().Name}, not a {typeof(T).Name}.");
+            }
+
+            var typed = (T)_pool.Rent(prefabId);
+
+            // Index and a fresh bind token from here on, so the cell's own Bind can use both.
+            typed.BeginBind(_bindingIndex);
 
             _pendingPrefabId = prefabId;
             _pendingCell = typed;
@@ -358,8 +474,16 @@ namespace Sinkii09.UIFramework
         {
             if (RejectReentrant(nameof(RefreshAll))) return;
 
-            ReleaseAllShown();
-            Pump();
+            string previous = EnterBusy(CellCallbacks);
+            try
+            {
+                ReleaseAllShown();
+                PumpCore();
+            }
+            finally
+            {
+                ExitBusy(previous);
+            }
         }
 
         /// <summary>Re-binds one index, if it is currently shown.</summary>
@@ -367,12 +491,20 @@ namespace Sinkii09.UIFramework
         {
             if (RejectReentrant(nameof(RefreshIndex))) return;
 
-            for (int i = 0; i < _shown.Count; i++)
+            string previous = EnterBusy(CellCallbacks);
+            try
             {
-                if (_shown[i].Index != index) continue;
+                for (int i = 0; i < _shown.Count; i++)
+                {
+                    if (_shown[i].Index != index) continue;
 
-                Rebind(i);
-                return;
+                    Rebind(i);
+                    return;
+                }
+            }
+            finally
+            {
+                ExitBusy(previous);
             }
         }
 
@@ -381,45 +513,18 @@ namespace Sinkii09.UIFramework
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
 
-            // Borrow the pump's guard so a mutating call from inside the action is refused loudly
-            // rather than corrupting _shown mid-walk.
-            _inPump = true;
+            // A scope of its own, so a mutating call from inside the action is refused loudly rather
+            // than corrupting _shown mid-walk — and so that, called from inside the pump, leaving it
+            // restores the pump's guard instead of clearing it.
+            string previous = EnterBusy(VisitCallbacks);
             try
             {
                 for (int i = 0; i < _shown.Count; i++) action(_shown[i].Cell);
             }
             finally
             {
-                _inPump = false;
+                ExitBusy(previous);
             }
-        }
-
-        /// <summary>
-        /// Scrolls so <paramref name="index"/> sits at <paramref name="alignment"/> within the
-        /// viewport (0 = leading edge, 1 = trailing edge), clamped to the list's bounds.
-        /// </summary>
-        public void ScrollToIndex(int index, float alignment = 0f)
-        {
-            if (_itemCount <= 0) return;
-            if (RejectReentrant(nameof(ScrollToIndex))) return;
-
-            index = Mathf.Clamp(index, 0, _itemCount - 1);
-            float viewportSize = _axis.SizeOf(_viewport.rect);
-
-            // The alignment term needs THIS row's size: aligning index 400 to the viewport's trailing
-            // edge lands short or long by however much that row differs from the declared default.
-            float target = OffsetOf(index) - Mathf.Clamp01(alignment) * (viewportSize - _offsets.SizeOf(index));
-            target = Mathf.Clamp(target, 0f, Mathf.Max(0f, TotalSize - viewportSize));
-
-            Vector2 current = _content.anchoredPosition;
-            float cross = _axis.Horizontal ? current.y : current.x;
-            _content.anchoredPosition = _axis.Compose(-_axis.Sign * target, cross);
-
-            // A programmatic move must not leave inertia behind, or the ScrollRect immediately
-            // drifts away from the position we just set.
-            _scrollRect.velocity = Vector2.zero;
-
-            Pump();
         }
 
         /// <summary>Offset-space start of a data index.</summary>

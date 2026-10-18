@@ -80,7 +80,31 @@ namespace Sinkii09.UIFramework
         {
             if (cell == null) return;
 
-            cell.OnRecycled();
+            // Both calls run consumer code — continuations awaiting the bind token, then OnRecycled.
+            // A throw here used to abort before the cell was staged, after the view had already
+            // dropped its handle: the cell stayed active and on screen with nothing tracking it, and
+            // a bulk release stopped half way. The bookkeeping below must complete whatever the
+            // callbacks do; each failure is still reported, with the cell as context.
+            //
+            // Token first: OnRecycled may read it and has to find it cancelled.
+            try
+            {
+                cell.EndBind();
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e, cell);
+            }
+
+            try
+            {
+                cell.OnRecycled();
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e, cell);
+            }
+
             cell.Index = -1;
             _tmp[prefabId].Add(cell);
             _liveCount--;

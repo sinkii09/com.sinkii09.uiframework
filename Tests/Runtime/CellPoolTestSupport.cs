@@ -9,7 +9,20 @@ namespace Sinkii09.UIFramework.Tests
     internal class TestCell : RecyclerCell
     {
         public int RecycledCount;
-        public override void OnRecycled() => RecycledCount++;
+
+        /// <summary>Runs inside OnRecycled — lets a test make the consumer callback throw or call back in.</summary>
+        public System.Action OnRecycledHook;
+
+        public override void OnRecycled()
+        {
+            RecycledCount++;
+            OnRecycledHook?.Invoke();
+        }
+    }
+
+    /// <summary>A second cell type, only ever named as a type argument — to ask for the wrong one.</summary>
+    internal class OtherTestCell : RecyclerCell
+    {
     }
 
     /// <summary>
@@ -43,9 +56,12 @@ namespace Sinkii09.UIFramework.Tests
         }
 
         /// <summary>
-        /// The conservation invariant: every cell the pool created is accounted for in exactly one
-        /// place. Catches both leaks (a cell lost on recycle) and double-recycles (a cell in two
-        /// tiers at once) — neither of which surfaces as an exception.
+        /// The conservation invariant: every cell the pool created is accounted for somewhere.
+        /// Catches leaks (a cell lost on recycle), which surface as no exception at all.
+        ///
+        /// <para><b>Blind to a double recycle.</b> Recycling one cell twice stages it twice and takes
+        /// two off the live count, so the sum still balances. Assert distinct instances for that —
+        /// see <c>RecyclerWindowAssert.Intact</c>.</para>
         /// </summary>
         internal static void AssertConserved(CellPool pool, int prefabCount)
         {

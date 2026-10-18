@@ -2,6 +2,78 @@
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-10-18
+
+RecyclerView hardening, and first-class support for cells whose content loads asynchronously.
+
+### Added
+- **`RecyclerCell.BindCancellationToken`** — cancelled the moment the cell stops representing its
+  item: scrolled out, re-bound by `RefreshIndex` / `RefreshAll` / `SetItemCount`, or the view is
+  destroyed. Pass it to async work started in Bind (a sprite, an avatar) and drop a result whose
+  token was cancelled — that closes the "load finished after the cell moved on" race. Created on
+  first read, one per bind; cells that never read it allocate nothing. Already cancelled outside a
+  bind and inside `OnRecycled`. Main thread only.
+- `RecyclerCell` documents the async recipe: reset visuals synchronously in Bind (a cell re-rented in
+  the same frame is still on screen with the previous picture), load with the token, check a
+  synchronous cache first, never verify a late result by `Index`.
+- `ScrollToIndex` called before initialization, or while the list is empty, is kept and applied once
+  it can be; a later request replaces it.
+
+### Fixed
+- **A provider that threw after `RentCell` leaked an active cell** — left on screen at a stale
+  position, tracked by nothing. From `Update` it repeated every frame: the pool drained, then one
+  `Instantiate` per frame. The rented cell is now handed back. Likewise `RentCell<T>` for a prefab that
+  is not a `T` (now checked against the prefab, before renting) and a provider returning a different
+  cell than the one it rented (now refused).
+- **Re-entrancy holes.** `RefreshIndex` ran the provider unguarded, every mutating method ran
+  `OnRecycled` unguarded, and `ForEachShownCell` switched the pump's guard off when called from inside
+  a provider. One busy guard now covers every consumer callback; a mutating call from any of them is
+  refused with an error, as calls from the pump already were.
+- **`OnRecycled` throwing** aborted the recycle, leaving a ghost cell and a half-finished bulk
+  release. It is now logged and the cell is pooled regardless.
+- **A failing `RefreshIndex`** left a permanent hole in the middle of the window (the window only
+  grows at its ends) — and a ghost when the provider had re-rented the old cell. The tail from the
+  failed slot is released; the next pump regrows it.
+- **A throw mid-pump** (e.g. during a reseed) left every staged cell active at its old position. The
+  pump now always flushes.
+- **`SetItemCount` with a throwing size provider** changed the count but not the layout table, so
+  every later pump indexed past the table. Count and table are adopted together, only on success.
+- **Calls before `Awake`** (a list inside a still-inactive panel): `SetItemCount` left the content
+  rect at its authored size for good, `ScrollToIndex` / `SetItemCount(resetPosition: true)` threw.
+  **Calls after destruction** (an awaited load finishing late) threw; they are now ignored.
+- **`SetCellProvider` on a live view** left cells bound by the previous provider on screen until they
+  scrolled out; they are re-bound.
+- **Fast flings rendered an empty leading edge.** The window was computed in `Update`, but ScrollRect
+  moves the content in its `LateUpdate`, so each frame rendered a window built for the previous
+  position; once a frame travelled further than `CreateDistance` (a hard fling on a 30 fps device,
+  any frame hitch) the edge was blank. The view now also pumps from `ScrollRect.onValueChanged`.
+- Cell prefab slots are validated at initialization: an empty slot or a prefab without a
+  `RectTransform` throws there, not at the first bind that happens to reach it.
+
+### Changed
+- `OnRecycled` exceptions no longer reach the caller of the mutating method; they are logged.
+  `OnRecycled` must be idempotent — a provider failing inside `RefreshIndex` can recycle the same cell
+  twice with no bind in between.
+- Mutating calls from `OnRecycled`, from a `RefreshIndex` provider, or after `ForEachShownCell` inside
+  a provider are refused (error logged) instead of executed.
+- `SetCellProvider` re-binds the cells on screen.
+- `RecyclerCell.Index` is valid inside the provider and the cell's Bind (it was -1 until the provider
+  returned).
+- The size provider runs while `ItemCount` still reports the previous count; take the range from
+  your own data.
+- The content rect is sized at initialization (0 for an empty list) rather than keeping its authored
+  size until the first `SetItemCount`.
+- While scrolling the view pumps up to twice per frame. Calling `onValueChanged.RemoveAllListeners()`
+  on its ScrollRect removes the view's own listener and brings the fling gap back.
+- Internal: `RecyclerView.Guard.cs` (busy guard) and `RecyclerView.Scroll.cs` (scrolling + parked
+  request) split out. Five new PlayMode suites (exception safety, re-entrancy, lifetime, bind token,
+  scroll timing).
+
+### Known limitations
+- Every refresh (`SetItemCount`, `RefreshAll`, `RefreshSizes`) still recycles and re-binds every
+  visible cell, and cells may land on different indices — async content needs a synchronous cache to
+  avoid a placeholder flash on refresh.
+
 ## [3.6.0] - 2026-10-17
 
 ### Added

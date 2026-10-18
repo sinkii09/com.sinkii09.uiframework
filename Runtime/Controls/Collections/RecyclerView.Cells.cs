@@ -109,9 +109,16 @@ namespace Sinkii09.UIFramework
             }
             catch
             {
-                // The old cell is already staged and FlushRecycled is about to deactivate it. Drop
-                // the slot rather than leave the window pointing at a cell that is on its way back
-                // to the pool — the next pump refills the gap.
+                // The old cell is already staged — by the Recycle above, or, if the provider
+                // re-rented it before throwing, by Bind handing it back. Recycling it again here
+                // would put one instance in the pool twice and later bind it to two slots at once,
+                // so its handle is dropped as it is.
+                //
+                // Everything after the slot goes too. The window only ever grows at its two ends, so
+                // a hole left in the middle would never be refilled while it stayed on screen;
+                // releasing the tail keeps one contiguous run that the next pump grows back.
+                for (int i = _shown.Count - 1; i > slot; i--) ReleaseAt(i);
+
                 _shown.RemoveAt(slot);
                 handle.Cell = null;
                 handle.Rect = null;
@@ -148,14 +155,23 @@ namespace Sinkii09.UIFramework
 
             RecyclerCell cell;
             _binding = true;
+            _bindingIndex = index;
             try
             {
                 cell = _provider(index);
             }
-            finally
+            catch
             {
+                // The usual provider shape is RentCell then Bind(data[index]), so a count/data
+                // mismatch throws with a cell already rented: active, on screen, tracked by nothing.
+                // From Update that repeats every frame — the pool drains and then one Instantiate a
+                // frame piles up ghost cells for as long as the bug lasts.
                 _binding = false;
+                ReturnPendingCell();
+                throw;
             }
+
+            _binding = false;
 
             if (cell == null)
             {
@@ -172,6 +188,17 @@ namespace Sinkii09.UIFramework
                 throw new InvalidOperationException(
                     $"[RecyclerView] '{name}' cell provider for index {index} did not obtain its " +
                     $"cell from {nameof(RentCell)}, so it could never be recycled.");
+
+            if (!ReferenceEquals(cell, _pendingCell))
+            {
+                // Tracking the returned object would put a cell the pool never issued into it, and
+                // leak the one it did.
+                ReturnPendingCell();
+
+                throw new InvalidOperationException(
+                    $"[RecyclerView] '{name}' cell provider for index {index} returned a different " +
+                    $"cell from the one it obtained from {nameof(RentCell)}.");
+            }
 
             cell.Index = index;
             _pendingCell = null;
