@@ -2,6 +2,59 @@
 
 ## [Unreleased]
 
+## [3.9.0] - 2026-10-19
+
+Two presentation pieces graduate from a game into the framework: a diagonal tile-wipe transition for
+full-screen curtains, and a component that plays one Animator state on demand. Additive only — nothing
+existing changed.
+
+### Added
+- **`PatternWipeTransition`** (`Create > UIFramework > Transitions > Pattern Wipe`) — a `UITransition`
+  that drives a `PatternWipeSurface` under the view. `Mode.Cover` (use as Show): tiles grow on a
+  diagonal sweep until the screen is hidden. `Mode.Reveal` (use as Hide): they shrink away on the same
+  sweep. The start pose is written when the tween is created, so the previous run never shows for a
+  frame. `RestoreOnCancel` restores the covered pose `(cover 1, reveal 0)` in both modes, because the
+  animator puts alpha back to 1 after a cancelled show or hide. With no surface under the view it logs
+  an error and returns an empty `Sequence`. Built for `TransitionOverlayView`.
+- **`PatternWipeSurface`** — goes on the full-screen curtain `Image`. It owns a per-instance copy of
+  the wipe material (the shared asset is never written) and exposes `SetPose(cover, reveal)`. A wrong
+  material is reported once; a packed or cropped sprite or Preserve Aspect gets a warning, because the
+  mesh UV must span the screen.
+- **Shader `UIFramework/UI/Pattern Wipe`** (uGUI, any render pipeline): the Image's sprite × colour
+  is the curtain; `_PatternTex`, `_PatternReverse`, `_Rows`, `_GridRotation`, `_Angle`, `_Spread` and
+  `_Softness` shape the wipe. Pattern-Diamond is the Editor default for newly created materials (not a
+  runtime fallback). Stencil and `RectMask2D` clipping work as in UI/Default.
+- **5 pattern textures** (Diamond, Dot, Square, Star, Stripe) from mob-sakai's Coffee.UIEffect, under
+  its MIT licence, which ships beside them (`UIEffect-LICENSE.txt`). They are imported uncompressed with
+  no mipmaps; the BC4 originals produce blocky edges.
+- **`OneShotAnimator`** (`Runtime/Juice`) — plays one Animator state once and keeps the Animator **off**
+  at rest. An enabled Animator rewrites its bound properties every frame, which on UI dirties the
+  graphic. API: `Play()`, `Play(string state)`, `PlayAsync(CancellationToken)`, `Complete()` (snap to
+  the end pose: a "skip") and `IsPlaying`. Serialized: `_state` (default `"Play"`), `_layer`,
+  `_playOnEnable` and `_unscaledTime` (default on). How a run ends:
+  - It ends when the state reaches normalizedTime 1, the Animator moves to another state, or other
+    code disables the Animator. A looping state stops after its first cycle.
+  - A disable mid-run comes back on the end pose rather than frozen half-way.
+  - `Play` while the object is inactive or disabled plays as soon as it is enabled.
+  - Awake forces `cullingMode = AlwaysAnimate`.
+  - `PlayAsync` completes when its run ends for any reason: finished, restarted, disabled, `Complete`,
+    or destroyed. That includes an object destroyed without ever being active. Cancelling the token
+    abandons only the wait; the animation keeps playing.
+  - A missing controller, layer or state is reported once per instance, and the Animator stays off.
+- **Sample "Shine Reveal"** — a diagonal shine sweep and flash, authored as an AnimationClip on Coffee
+  `UIEffect` fields and played by `OneShotAnimator`. **Requires Coffee.UIEffect.** Unlike the code-only
+  Recycler View List sample, it ships its `.meta` files, because the scene, prefab, controller and clip
+  link to each other by GUID.
+
+### Migration (projects that had local copies)
+- TheEnd's `PatternWipe.*` and `ShineReveal.ShineRevealPlayer` became `Sinkii09.UIFramework.*`. The
+  package files carry the same GUIDs (`ShineRevealPlayer.cs`'s GUID now belongs to
+  `OneShotAnimator.cs`), so existing scenes, prefabs, materials and transition assets keep their
+  references.
+- Delete the local copies **before** the package resolves. Two assets with one GUID make Unity mint a
+  new GUID for one of them, and its references break silently.
+- Serialized field names are unchanged (`_mode`, `_playOnEnable`).
+
 ## [3.8.0] - 2026-10-18
 
 A prefetch hook for `RecyclerView`: the consumer learns which indices are about to be bound, so it

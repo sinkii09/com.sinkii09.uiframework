@@ -1,6 +1,6 @@
 {
     "name": "com.sinkii09.uiframework",
-    "version": "3.8.0",
+    "version": "3.9.0",
     "displayName": "Sinkii09 UI Framework",
     "description": "Unity 6 reactive UI framework: R3 MVVM, VContainer DI, DOTween animations, game lifecycle.",
     "unity": "6000.0",
@@ -18,6 +18,11 @@
             "displayName": "Recycler View List",
             "description": "A 50,000-row leaderboard driven by RecyclerView: cell provider, cell prefab, and the rent-exactly-one contract.",
             "path": "Samples~/RecyclerViewList"
+        },
+        {
+            "displayName": "Shine Reveal",
+            "description": "A one-shot shine sweep played on demand by OneShotAnimator, with the Animator off at rest. Requires Coffee.UIEffect.",
+            "path": "Samples~/ShineReveal"
         }
     ]
 }
