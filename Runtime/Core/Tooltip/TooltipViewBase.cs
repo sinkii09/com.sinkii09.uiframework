@@ -34,9 +34,9 @@ namespace Sinkii09.UIFramework
         {
             base.Awake();
 
-            // Pre-hide so the first frame after scene load never flashes the tooltip.
-            CanvasGroup.alpha = 0f;
-            gameObject.SetActive(false);
+            // Pre-hide so the first frame after scene load never flashes the tooltip — but not when a
+            // view saved inactive is being woken by the service to show its first tooltip.
+            PreHide();
 
             // THE FLICKER LOOP: if a tooltip takes raycasts it appears under the cursor, the
             // pointer "exits" the anchor beneath it, the tooltip hides, the pointer re-enters, and

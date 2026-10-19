@@ -92,7 +92,11 @@ namespace Sinkii09.UIFramework
                 // IAsyncStartable cannot return a result, so a refused boot would otherwise leave
                 // the game on an empty stack with nothing but a warning to explain it.
                 NavigationResult result = await _navigator.ChangeStateAsync<BootState>(cts.Token);
-                if (result != NavigationResult.Completed)
+                if (result == NavigationResult.Rejected)
+                    Debug.LogError($"[GameLifecycleManager] Boot transition was {result} — the game has no initial state. " +
+                        "Something navigated before StartAsync (e.g. a raw ShowAsync from an IInitializable bootstrap); " +
+                        "enter the first state with EnqueueStateChange<T>() instead.");
+                else if (result != NavigationResult.Completed)
                     Debug.LogError($"[GameLifecycleManager] Boot transition was {result} — the game has no initial state.");
             }
             finally

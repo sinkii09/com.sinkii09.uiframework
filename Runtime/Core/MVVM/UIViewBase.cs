@@ -10,7 +10,7 @@ namespace Sinkii09.UIFramework
     [RequireComponent(typeof(CanvasGroup))]
     [RequireComponent(typeof(RectTransform))]
 
-    public abstract class UIViewBase : MonoBehaviour, IUIView
+    public abstract partial class UIViewBase : MonoBehaviour, IUIView
     {
         // Null = instant show/hide (no animation). Assign ScriptableObject transitions in Inspector.
         // [UIOptional] because null is a documented, meaningful value here — without it every view
@@ -69,7 +69,7 @@ namespace Sinkii09.UIFramework
             try
             {
                 OnPrepareForShow();
-                gameObject.SetActive(true);
+                ActivateForShow();
                 if (_animator != null)
                     await _animator.ShowAsync(this, _showTransition, cts.Token);
                 await OnShowAsync(cts.Token);

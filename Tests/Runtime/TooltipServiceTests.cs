@@ -131,6 +131,25 @@ namespace Sinkii09.UIFramework.Tests
         }
 
         [Test]
+        public void Show_ViewSavedInactive_BindsWhileActive()
+        {
+            // Regression: a view saved inactive wakes inside the service's pre-bind activation, and
+            // its pre-hide switched it straight back off, so the first tooltip was bound and measured
+            // while inactive (stale layout size). ShowAsync re-activates it afterwards, which is why
+            // only ActiveOnBind can tell.
+            UnityEngine.Object.DestroyImmediate(_view.gameObject);   // Initialize scans the scene for views
+            var go = new GameObject("TooltipView", typeof(RectTransform), typeof(CanvasGroup));
+            go.SetActive(false);
+            _view = go.AddComponent<TestTooltipView>();   // reassigned so TearDown destroys it
+
+            var service = BuildService();
+            service.Show(Request(NewAnchor(), TooltipSource.Click));
+
+            Assert.IsTrue(_view.ActiveOnBind, "The first tooltip must be bound while its view is active.");
+            Assert.IsTrue(service.IsShown);
+        }
+
+        [Test]
         public void Hide_FromAnAnchorThatIsNotCurrent_IsIgnored()
         {
             var service = BuildService();

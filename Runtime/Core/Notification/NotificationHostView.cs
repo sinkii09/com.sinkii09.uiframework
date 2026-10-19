@@ -39,9 +39,9 @@ namespace Sinkii09.UIFramework
         {
             base.Awake();
 
-            // Pre-hide so the first frame after scene load never flashes an empty host.
-            CanvasGroup.alpha = 0f;
-            gameObject.SetActive(false);
+            // Pre-hide so the first frame after scene load never flashes an empty host — but not when
+            // a host saved inactive is being woken by the service to show its first toast.
+            PreHide();
 
             // A host that takes raycasts sits over the whole screen on layer 275 and swallows every
             // click above Popup, because the layer canvas carries a GraphicRaycaster. Belt and

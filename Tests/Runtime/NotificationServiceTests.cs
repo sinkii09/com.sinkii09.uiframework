@@ -500,7 +500,8 @@ namespace Sinkii09.UIFramework.Tests
 
         // ------------------------------------------------------------------ host-backed
 
-        private NotificationHostView NewHost()
+        // wake: false leaves the host as a scene saved it inactive — Awake has not run yet.
+        private NotificationHostView NewHost(bool wake = true)
         {
             var itemGo = new GameObject("Item", typeof(RectTransform), typeof(CanvasGroup));
             var item = itemGo.AddComponent<NotificationItemView>();
@@ -517,7 +518,7 @@ namespace Sinkii09.UIFramework.Tests
                 .GetField("_itemPrefab", BindingFlags.Instance | BindingFlags.NonPublic)
                 .SetValue(host, item);
 
-            hostGo.SetActive(true);   // Awake runs here, with the reference already assigned
+            if (wake) hostGo.SetActive(true);   // Awake runs here, with the reference already assigned
             return host;
         }
 
@@ -541,6 +542,30 @@ namespace Sinkii09.UIFramework.Tests
 
             svc.Tick(1.1f);   // expires, fade is instant, slot frees
             Assert.IsFalse(host.gameObject.activeSelf, "The host must hide again once nothing is shown.");
+
+            Object.DestroyImmediate(host.gameObject);
+            await UniTask.Yield();
+        });
+
+        [UnityTest]
+        public IEnumerator Host_SavedInactive_IsShownOnTheFirstToast() => UniTask.ToCoroutine(async () =>
+        {
+            // Regression: a host saved inactive wakes inside ShowHost's own activation, and its
+            // pre-hide switched it straight back off, so the first toasts were bound on an inactive
+            // host and never drawn.
+            var host = NewHost(wake: false);
+            // A fresh CanvasGroup defaults to 1; start at 0 so the alpha assert proves ShowHost wrote it.
+            host.GetComponent<CanvasGroup>().alpha = 0f;
+            var svc = NewService();
+            LogAssert.Expect(LogType.Error, new Regex("no Notification layer"));
+            svc.Initialize();
+            Assert.IsFalse(host.gameObject.activeSelf, "Precondition: saved inactive, never woken.");
+
+            svc.Notify(Req("a", duration: 1f));
+            svc.Tick(0f);
+
+            Assert.IsTrue(host.gameObject.activeSelf, "The first toast must wake the host AND keep it active.");
+            Assert.AreEqual(1f, host.CanvasGroup.alpha, 0.001f);
 
             Object.DestroyImmediate(host.gameObject);
             await UniTask.Yield();

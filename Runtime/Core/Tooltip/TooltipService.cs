@@ -225,13 +225,14 @@ namespace Sinkii09.UIFramework
                 // Activate BEFORE binding and measuring. LayoutRebuilder strips disabled
                 // behaviours, so a ContentSizeFitter on an inactive GameObject never runs and the
                 // positioner would flip and clamp against the PREVIOUS payload's size.
-                // UIViewBase.ShowAsync only activates at its :45, which is far too late for this.
+                // UIViewBase.ShowAsync only activates inside its own call, far too late for this.
                 if (!view.gameObject.activeSelf)
                 {
-                    // Activating with the old alpha would flash stale content at a stale position
-                    // for one frame before the show transition takes over.
+                    view.ActivateForShow();
+                    // The old alpha would flash stale content at a stale position for one frame
+                    // before the show transition takes over. Written after activating, in the same
+                    // frame: a view saved inactive only caches its CanvasGroup in Awake.
                     if (view.CanvasGroup != null) view.CanvasGroup.alpha = 0f;
-                    view.gameObject.SetActive(true);
                 }
 
                 view.Bind(request.Payload);

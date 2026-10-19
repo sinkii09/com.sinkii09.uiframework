@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [3.9.1] - 2026-10-19
+
+Resident views saved inactive now show on their first show. No API change.
+
+### Fixed
+- **A resident view saved inactive switched itself off inside its own first show.**
+  `TransitionOverlayView`, `NotificationHostView` and `TooltipViewBase` deactivate themselves in `Awake`
+  so a view saved active never flashes on the first frame. A view saved inactive has not woken yet, so
+  its `Awake` ran inside the very `SetActive(true)` that was showing it and turned it straight back off.
+  Nothing was logged. The symptoms:
+  - Overlay: the first transition of every session showed no curtain.
+  - Notification host: the first toasts were bound on an inactive host and never drawn.
+  - Tooltip: the first tooltip was bound and positioned while inactive, so its layout size was stale.
+
+  Every framework path that activates a view to show it now goes through one internal method
+  (`UIViewBase.ActivateForShow`). The pre-hide is skipped when `Awake` runs inside that call. The
+  callers that own alpha now write it after activating, because a view that has never woken has no
+  cached `CanvasGroup` yet. Saving these views active or inactive both work now.
+- **The boot rejection error now names its likely cause.** When `StartAsync`'s `BootState` transition is
+  `Rejected`, the error now says that something navigated before `StartAsync` (typically a raw
+  `ShowAsync` from an `IInitializable` bootstrap). It also says to enter the first state with
+  `EnqueueStateChange<T>()`, which waits for boot. The `BootState` comment says the same. The message
+  prefix is unchanged.
+
 ## [3.9.0] - 2026-10-19
 
 Two presentation pieces graduate from a game into the framework: a diagonal tile-wipe transition for

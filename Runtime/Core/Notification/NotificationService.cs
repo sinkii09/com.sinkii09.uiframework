@@ -515,8 +515,10 @@ namespace Sinkii09.UIFramework
             if (_host == null) DiscoverHost();
             if (_host == null) return;
 
+            // Activate first: a host saved inactive caches its CanvasGroup in Awake, so an alpha write
+            // before this would be a no-op and leave the first toasts at whatever alpha was saved.
+            _host.ActivateForShow();
             if (_host.CanvasGroup != null) _host.CanvasGroup.alpha = 1f;
-            if (!_host.gameObject.activeSelf) _host.gameObject.SetActive(true);
         }
 
         private void HideHost()

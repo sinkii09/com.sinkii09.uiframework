@@ -27,11 +27,11 @@ namespace Sinkii09.UIFramework
         protected override void Awake()
         {
             base.Awake();
-            // Pre-hide so the first frame after scene load never flashes the overlay.
-            CanvasGroup.alpha = 0f;
             CanvasGroup.interactable = false;
             CanvasGroup.blocksRaycasts = false;
-            gameObject.SetActive(false);
+            // Pre-hide so the first frame after scene load never flashes the overlay. Saved inactive, it
+            // wakes inside its first ShowAsync instead, and PreHide leaves that show alone.
+            PreHide();
         }
 
         public override async UniTask ShowAsync(CancellationToken externalCt = default)
