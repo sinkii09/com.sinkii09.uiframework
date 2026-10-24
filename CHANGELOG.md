@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [3.10.0] - 2026-10-24
+
+A short effect wherever the player clicks or taps, drawn above the UI. Set up in one click.
+
+### Added
+- **`TapEffectSpawner`** (Juice). Put it on a UI object under a Canvas and assign an effect (a prefab,
+  or an inactive child used as a template). Every mouse-left press, primary touch, or pen tip shows the
+  effect at the pointer. It listens with one `InputAction` on `<Pointer>/press`, so it never blocks or
+  consumes a click. Effects come from a small ring (`_maxEffects`, default 8); a burst past it restarts
+  the oldest. `Play(Vector2 screenPosition)` lets game code show one too.
+  - **Restart contract:** the spawner switches the effect off and on again. Anything that plays on
+    enable works: `TapRipple`, a ParticleSystem with Play On Awake (set Stop Action = Disable), an
+    Animator. The effect should switch itself off when it ends.
+  - Missing Canvas, missing effect, or an **active** scene template logs an error in `Start` instead of
+    failing silently (an active template plays its own ripple once and every copy inherits its end scale).
+- **`TapRipple`** — the ready-made look: grows from 0.3× to 1× while fading a CanvasGroup out
+  (0.35 s, unscaled time, so it plays in a pause menu), then switches itself off.
+- **`GameObject > UI > UIFramework > Tap Effect`** — creates a root overlay canvas (sorting order 500,
+  above every UIRoot layer, no GraphicRaycaster) with a wired `Ripple` template using Unity's
+  built-in circle sprite. No package art.
+
+### Known limitations
+- Primary pointer only (no effect per finger).
+- If a parent is disabled mid-ripple, that ripple replays once when the parent comes back.
+- Two spawners in loaded scenes show two effects per tap.
+- With Input System update mode = FixedUpdate, no input is processed while `timeScale = 0`, so no ripples.
+- Screen Space Overlay / Camera canvases only.
+
 ## [3.9.1] - 2026-10-19
 
 Resident views saved inactive now show on their first show. No API change.
