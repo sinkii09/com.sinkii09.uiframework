@@ -21,7 +21,8 @@ All additive: existing int/long, save and UIRoot behaviour is unchanged unless y
   the browser's `visibilitychange` (hidden) / `pagehide` event; `AutoSaveScheduler` runs its
   synchronous flush there, as it does on app pause.
 - **WebGL storage flush** — every successful save or delete requests an `FS.syncfs` to IndexedDB
-  (coalesced, never awaited), and the page-hide path forces one. A completed save is now handed to
+  (coalesced, never awaited), and the page-hide path forces one. A sync whose callback never returns
+  (tab frozen, bfcache) is written off when the page is shown again. A completed save is now handed to
   IndexedDB rather than left in memory. Hosts should turn `autoSyncPersistentDataPath` off.
 - **`UIRootSetup._maxAspect`** + `IsLetterboxed` — on screens wider than the cap (e.g. 0.5625 = 9:16)
   the UI becomes a centred column inside the safe area; a `ScaleWithScreenSize` scaler matches height
