@@ -14,8 +14,9 @@ namespace Sinkii09.UIFramework
     /// A value set while inactive, or the very first value, is applied instantly: R3 emits the
     /// current value on Subscribe, and rolling up from 0 on every show reads as a bug.
     /// </remarks>
+    // The double (idle-notation) path lives in RollingNumberLabel.Double.cs.
     [DisallowMultipleComponent]
-    public sealed class RollingNumberLabel : MonoBehaviour
+    public sealed partial class RollingNumberLabel : MonoBehaviour
     {
         [SerializeField] private TMP_Text _label;
         [SerializeField] private string _format = "N0";
@@ -32,8 +33,17 @@ namespace Sinkii09.UIFramework
         private long _shown;
         private bool _hasShown;
 
-        public long Value => _target;
-        public long DisplayedValue => _shown;
+        // Which overload the label is driven by, and which one last wrote the text. They differ only
+        // for the instant between a mode switch and its snap; the second one is what keeps each
+        // path's dedupe from trusting text the other path wrote.
+        private bool _doubleMode;
+        private bool _renderedDouble;
+
+        /// <remarks>In double mode, the double value saturated to the long range.</remarks>
+        public long Value => _doubleMode ? SaturateToLong(_targetDouble) : _target;
+
+        /// <remarks>In double mode, the double value saturated to the long range.</remarks>
+        public long DisplayedValue => _doubleMode ? SaturateToLong(_shownDouble) : _shown;
         public bool IsRolling => DOTween.IsTweening(this);
 
         // Resolved lazily too: SetValue can arrive before Awake when the label starts inactive in a
@@ -48,9 +58,11 @@ namespace Sinkii09.UIFramework
         public void SetValue(long target, bool animate = true)
         {
             _target = target;
+            var switchingMode = _doubleMode;
+            _doubleMode = false;
             DOTween.Kill(this);
 
-            if (!animate || !_hasShown || !isActiveAndEnabled)
+            if (!animate || !_hasShown || switchingMode || !isActiveAndEnabled)
             {
                 Show(target);
                 return;
@@ -80,17 +92,20 @@ namespace Sinkii09.UIFramework
         private void OnDisable()
         {
             DOTween.Kill(this);
-            if (_hasShown) Show(_target);
+            if (!_hasShown) return;
+            if (_doubleMode) ShowDouble(_targetDouble);
+            else Show(_target);
         }
 
         // Reformats only when the integer actually changes — no per-frame string allocation.
         private void Show(long value)
         {
-            if (_hasShown && value == _shown) return;
+            if (_hasShown && !_renderedDouble && value == _shown) return;
 
             ResolveLabel();
             _shown = value;
             _hasShown = true;
+            _renderedDouble = false;
             if (_label != null) _label.SetText(value.ToString(_format));
         }
     }

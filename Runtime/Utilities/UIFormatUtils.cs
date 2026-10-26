@@ -3,7 +3,8 @@ using UnityEngine;
 
 namespace Sinkii09.UIFramework
 {
-    public static class UIFormatUtils
+    // Idle-game notation (FormatIdle) lives in UIFormatUtils.Idle.cs.
+    public static partial class UIFormatUtils
     {
         // "2:05" from 125.3 seconds
         public static string FormatTime(float totalSeconds)
