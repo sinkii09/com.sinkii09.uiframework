@@ -17,10 +17,12 @@ var UIFrameworkBrowserLifecycle = {
     onSyncError: 0,
     listening: false,
     inFlight: 0,
+    generation: 0,
     pending: false,
     inHidden: false,
     visibilityListener: null,
     pageHideListener: null,
+    pageShowListener: null,
 
     flush: function (force) {
       var state = UIFrameworkLifecycle;
@@ -31,9 +33,12 @@ var UIFrameworkBrowserLifecycle = {
       // This sync captures everything written so far, including whatever was queued.
       state.pending = false;
       state.inFlight++;
+      // A callback only counts against the generation it started in: after recover() writes off
+      // stuck syncs, one of them arriving late must not drive inFlight below the live count.
+      var generation = state.generation;
       try {
         FS.syncfs(false, function (err) {
-          state.inFlight--;
+          if (generation === state.generation) state.inFlight--;
           if (err) {
             console.error('[UIFramework] FS.syncfs failed', err);
             var onSyncError = state.onSyncError;
@@ -47,6 +52,18 @@ var UIFrameworkBrowserLifecycle = {
         state.inFlight--;
         console.error('[UIFramework] FS.syncfs threw', e);
       }
+    },
+
+    // The page is visible again (visibilitychange, or a bfcache restore via pageshow). A sync whose
+    // callback never came back — tab frozen mid-sync, page frozen in bfcache — would hold inFlight
+    // above zero forever and leave every later request merely queued. With work queued, write off
+    // the outstanding syncs (their late callbacks are ignored by generation) and sync now.
+    recover: function () {
+      var state = UIFrameworkLifecycle;
+      if (!state.pending) return;
+      state.generation++;
+      state.inFlight = 0;
+      state.flush(false);
     },
 
     hidden: function () {
@@ -77,10 +94,14 @@ var UIFrameworkBrowserLifecycle = {
 
     state.visibilityListener = function () {
       if (document.visibilityState === 'hidden') state.hidden();
+      else state.recover();
     };
     state.pageHideListener = function () { state.hidden(); };
+    // Safari does not reliably raise visibilitychange on a bfcache restore; pageshow does.
+    state.pageShowListener = function (e) { if (e && e.persisted) state.recover(); };
     document.addEventListener('visibilitychange', state.visibilityListener);
     window.addEventListener('pagehide', state.pageHideListener);
+    window.addEventListener('pageshow', state.pageShowListener);
     state.listening = true;
   },
 
@@ -92,8 +113,10 @@ var UIFrameworkBrowserLifecycle = {
 
     document.removeEventListener('visibilitychange', state.visibilityListener);
     window.removeEventListener('pagehide', state.pageHideListener);
+    window.removeEventListener('pageshow', state.pageShowListener);
     state.visibilityListener = null;
     state.pageHideListener = null;
+    state.pageShowListener = null;
     state.listening = false;
   }
 };
