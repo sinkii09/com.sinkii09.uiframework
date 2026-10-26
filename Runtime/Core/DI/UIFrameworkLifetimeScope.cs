@@ -40,6 +40,9 @@ namespace Sinkii09.UIFramework
             OnAwake();
         }
 
+        // True for a second UIRoot that Awake is destroying; its container is never built.
+        internal bool IsDuplicate => _instance != null && _instance != this;
+
         // Called after the VContainer container is built. Override in subclasses for
         // post-build initialisation without touching the singleton guard or DDOL logic.
         protected virtual void OnAwake() { }
@@ -106,6 +109,12 @@ namespace Sinkii09.UIFramework
                 Debug.LogWarning("[UIFrameworkLifetimeScope] SafeAreaProvider not found in hierarchy — add it to the UIRoot prefab. Falling back to a full-screen NullSafeAreaProvider.", this);
                 builder.RegisterInstance<ISafeAreaProvider>(new NullSafeAreaProvider());
             }
+
+            // Injected here so UIRootSetup needs no autoInjectGameObjects entry — without one its
+            // [Inject] field stayed null. The container builds in this scope's Awake, before Start.
+            var rootSetup = GetComponentInChildren<UIRootSetup>(true);
+            if (rootSetup != null)
+                builder.RegisterBuildCallback(resolver => resolver.Inject(rootSetup));
 
             builder.Register<IBackButtonSource, NewInputSystemBackButtonSource>(Lifetime.Singleton);
             builder.RegisterEntryPoint<BackButtonRouter>();

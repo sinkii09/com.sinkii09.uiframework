@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Sinkii09.UIFramework
 {
     // Default ISafeAreaProvider when no SafeAreaProvider exists in the scene hierarchy.
-    // Mirrors NullTransitionOverlay: full-screen Rect, not Rect.zero — UIRootSetup.ApplySafeArea
+    // Mirrors NullTransitionOverlay: full-screen Rect, not Rect.zero — UIRootSetup.Apply
     // divides by Screen.width/height to compute anchors, so a zero Rect would collapse the safe
     // area panel to a zero-size box and blank the UI, not just skip the feature.
     public sealed class NullSafeAreaProvider : ISafeAreaProvider

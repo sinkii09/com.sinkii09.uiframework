@@ -109,7 +109,7 @@ namespace Sinkii09.UIFramework.Editor
         }
 
         // Returns a description of what changed, or null when nothing did.
-        private static string Upgrade(UIFrameworkLifetimeScope scope)
+        internal static string Upgrade(UIFrameworkLifetimeScope scope)
         {
             var created = new List<string>();
             var wired = new List<string>();
@@ -126,7 +126,8 @@ namespace Sinkii09.UIFramework.Editor
             // parent of whichever layer is already wired, so a newly created one lands beside its
             // siblings — under the same Canvas — instead of under the scope, which could be
             // somewhere else entirely.
-            var root = ExistingLayerParent(layers) ?? scope.transform;
+            // With nothing wired yet, the installer's SafeArea panel is where the layers live.
+            var root = ExistingLayerParent(layers) ?? UIRootSafeAreaRestructurer.FindLayerRoot(scope);
 
             foreach (var (name, order) in LayerSpecs)
             {
@@ -151,12 +152,17 @@ namespace Sinkii09.UIFramework.Editor
                 wired.Add(name);
             }
 
-            if (created.Count == 0 && wired.Count == 0) return null;
-
             serialized.ApplyModifiedPropertiesWithoutUndo();
+            // Before the early return, and counted as a change: a fully wired pre-v3.11.0 UIRoot
+            // needs ONLY this step, and would otherwise be reported "up to date" and never saved.
+            string restructure = UIRootSafeAreaRestructurer.Apply(scope, layers);
+
+            if (created.Count == 0 && wired.Count == 0 && restructure == null) return null;
+
             EditorUtility.SetDirty(scope);
 
             var parts = new List<string>();
+            if (restructure != null) parts.Add(restructure);
             if (created.Count > 0) parts.Add("created " + string.Join(", ", created));
             if (wired.Count > 0) parts.Add("wired " + string.Join(", ", wired));
             return string.Join("; ", parts);

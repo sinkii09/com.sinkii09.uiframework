@@ -302,6 +302,18 @@ namespace Sinkii09.UIFramework.Editor
             scaler.referenceResolution = new Vector2(1080, 1920);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0.5f;
+
+            // Every layer lives under one full-stretch panel that UIRootSetup anchors to the device
+            // safe area (and optionally caps to a portrait aspect). Name must match
+            // UIRootSafeAreaRestructurer.PanelName, which the upgrader looks for.
+            var safeArea = new GameObject("SafeArea", typeof(RectTransform));
+            safeArea.transform.SetParent(root.transform, false);
+            var safeAreaRect = (RectTransform)safeArea.transform;
+            safeAreaRect.anchorMin = Vector2.zero;
+            safeAreaRect.anchorMax = Vector2.one;
+            safeAreaRect.offsetMin = Vector2.zero;
+            safeAreaRect.offsetMax = Vector2.zero;
+
             // Keep in sync with UILayer's declaration order and with
             // UIFrameworkUIRootUpgrader.LayerSpecs, which is what actually wires these up.
             string[] layerNames = { "HUD", "Screen", "Popup", "Tooltip", "Notification", "Overlay", "Debug" };
@@ -309,7 +321,7 @@ namespace Sinkii09.UIFramework.Editor
             for (int i = 0; i < layerNames.Length; i++)
             {
                 var child = new GameObject(layerNames[i]);
-                child.transform.SetParent(root.transform, false);
+                child.transform.SetParent(safeArea.transform, false);
                 var rect = child.AddComponent<RectTransform>();
                 rect.anchorMin = Vector2.zero;
                 rect.anchorMax = Vector2.one;
@@ -328,6 +340,23 @@ namespace Sinkii09.UIFramework.Editor
                 root.AddComponent(safeAreaType);
             else
                 Log("Step 7 WARNING: SafeAreaProvider not found — add it to UIRoot manually after runtime compiles.");
+
+            // Wired here through SerializedObject: this assembly cannot reference the runtime type.
+            var rootSetupType = FindType("Sinkii09.UIFramework.UIRootSetup");
+            if (rootSetupType != null)
+            {
+                var setup = new SerializedObject(root.AddComponent(rootSetupType));
+                var panelField = setup.FindProperty("_safeAreaPanel");
+                if (panelField != null)
+                {
+                    panelField.objectReferenceValue = safeAreaRect;
+                    setup.ApplyModifiedPropertiesWithoutUndo();
+                }
+                else
+                    Log("Step 7 WARNING: UIRootSetup has no _safeAreaPanel field — run Tools > UIFramework > Upgrade UIRoot Layers.");
+            }
+            else
+                Log("Step 7 WARNING: UIRootSetup not found — run Tools > UIFramework > Upgrade UIRoot Layers after runtime compiles.");
 
             var scopeType = FindType("Sinkii09.UIFramework.UIFrameworkLifetimeScope");
             if (scopeType != null)
