@@ -2,6 +2,44 @@
 
 ## [Unreleased]
 
+## [3.11.0] - 2026-10-26
+
+Idle-game numbers, WebGL saves that survive closing the tab, and a portrait column on wide screens.
+All additive: existing int/long, save and UIRoot behaviour is unchanged unless you opt in.
+
+### Added
+- **`UIFormatUtils.FormatIdle(double)`** — "999", "1.23K", "45.6M", "789T", then "1.00aa" (1e15),
+  "ab" … "zz". Three significant digits, truncated so a value never shows the next tier early
+  (999,999 is "999K"). Tolerant of decimal noise (1150 prints "1.15K", not "1.14K"). NaN prints "0"
+  and logs once; infinity prints "∞".
+- **`ResourceCounter.SetAmount(double)` / `SetValues(double, double)`** — idle-formatted readouts. The
+  int `Current`/`Max` text is unchanged, and setting either switches back to it.
+- **`RollingNumberLabel.SetValue(double)`**, `ValueDouble`, `DisplayedValueDouble` — rolls in idle
+  notation, with a duration based on the relative change. `int`/`long` arguments still use the long
+  overload. Switching overloads snaps instead of rolling.
+- **WebGL save on page hide** — `AppLifecycleSignals.OnHiddenAsObservable` fires synchronously inside
+  the browser's `visibilitychange` (hidden) / `pagehide` event; `AutoSaveScheduler` runs its
+  synchronous flush there, as it does on app pause.
+- **WebGL storage flush** — every successful save or delete requests an `FS.syncfs` to IndexedDB
+  (coalesced, never awaited), and the page-hide path forces one. A completed save is now handed to
+  IndexedDB rather than left in memory. Hosts should turn `autoSyncPersistentDataPath` off.
+- **`UIRootSetup._maxAspect`** + `IsLetterboxed` — on screens wider than the cap (e.g. 0.5625 = 9:16)
+  the UI becomes a centred column inside the safe area; a `ScaleWithScreenSize` scaler matches height
+  while capped. 0 (default) = off.
+- **SafeArea panel** — the installer now builds `UIRoot → SafeArea → layers` with `UIRootSetup`
+  wired. **Existing projects: run `Tools > UIFramework > Upgrade UIRoot Layers`** to move their
+  layers under a `SafeArea` panel (idempotent; refuses hierarchies it does not recognise).
+
+### Fixed
+- `UIRootSetup` was never injected unless listed in `autoInjectGameObjects`, so adding it threw a
+  NullReferenceException in `Start`. The scope now injects it.
+- UIRoots built by the installer ignored device notches (no safe-area panel existed).
+
+### Known limitations
+- The world camera is not letterboxed; the framework draws no side bars.
+- Following a browser resize needs a `SafeAreaProvider` on the UIRoot.
+- No save can survive a hard browser kill before IndexedDB commits its transaction.
+
 ## [3.10.0] - 2026-10-24
 
 A short effect wherever the player clicks or taps, drawn above the UI. Set up in one click.
