@@ -52,5 +52,15 @@ namespace Sinkii09.UIFramework
             ct.ThrowIfCancellationRequested();
             return UniTask.FromResult(result);
         }
+
+        // Inline dispatch means WebGL, where a completed write is only in IDBFS (memory) until it is
+        // synced to IndexedDB. Requested, never awaited — see WebGlBrowserBridge.RequestStorageFlush
+        // for why awaiting would lose the newest save on a tab hide. Called only after a write or
+        // delete has succeeded; the thread-pool path has a real disk and never asks.
+        private void RequestFlushIfInline()
+        {
+            if (!_useThreadPool)
+                _requestStorageFlush();
+        }
     }
 }

@@ -19,15 +19,14 @@ namespace Sinkii09.UIFramework
     // what RunIo exists to handle.
     //
     // WebGL durability, the honest version — this is the residual window IStorageBackend.WriteAsync
-    // says belongs on the implementation. When WriteAsync completes, the bytes are in IDBFS; the
-    // flush from IDBFS to IndexedDB is owned by the engine, asynchronous, and NOT awaitable from C#.
-    // Measured: saves survived a forced browser kill on Chromium and a session boundary on iOS
-    // Safari. Not proven: writing and closing the tab within about a second. A host page narrows the
-    // window with `config.autoSyncPersistentDataPath = true` in createUnityInstance(), which syncs on
-    // every file modification — not free, since one save here is 3-4 modifications (temp write, then
-    // replace). Closing it outright needs a .jslib wrapper over Emscripten's FS.syncfs; that is a
-    // deliberate, named extension point left unbuilt because nothing needs it yet. Note Unity has
-    // deprecated the older JS_FileSystem_Sync(), so do not build on that one.
+    // says belongs on the implementation. When WriteAsync completes, the bytes are in IDBFS (memory).
+    // Every successful write or delete then REQUESTS an FS.syncfs push to IndexedDB through
+    // WebGlBrowserBridge (v3.11.0), coalesced in the jslib and deliberately not awaited — see
+    // RequestFlushIfInline. So a completed save has been handed to IndexedDB, and the remaining
+    // window is that IndexedDB transaction itself, which no page can close. Page hide also flushes,
+    // after AutoSaveScheduler's synchronous save. Hosts should leave
+    // `config.autoSyncPersistentDataPath` off now: it syncs on every one of a save's 3-4 file
+    // modifications and races this flush. Unity has deprecated JS_FileSystem_Sync(); do not use it.
     //
     // Substituting a backend needs no virtual hook: VContainer resolves duplicate registrations
     // last-wins (Registry.cs:78-81), so a scope that calls base.Configure(builder) and then registers
@@ -55,6 +54,7 @@ namespace Sinkii09.UIFramework
         // trap this sprint's review caught in the autosave policy design. Application.platform keeps
         // both paths compiled on every target and lets a test force either one.
         private readonly bool _useThreadPool;
+        private readonly Action _requestStorageFlush;
 
         // [Inject] is MANDATORY here, not decoration. VContainer's TypeAnalyzer enumerates
         // constructors with BindingFlags.NonPublic and, absent an [Inject] marker, picks the one with
@@ -69,12 +69,14 @@ namespace Sinkii09.UIFramework
         {
         }
 
-        // Test seam: forces the dispatch mode so both paths run in a single Editor session.
-        internal LocalFileStorageBackend(bool useThreadPool)
+        // Test seam: forces the dispatch mode so both paths run in a single Editor session, and lets a
+        // test observe flush requests, which are a no-op outside a WebGL player.
+        internal LocalFileStorageBackend(bool useThreadPool, Action requestStorageFlush = null)
         {
             // Assigned FIRST: CleanupOrphanedTempFilesAsync below is itself a RunIo caller and would
             // otherwise dispatch on an unassigned flag.
             _useThreadPool = useThreadPool;
+            _requestStorageFlush = requestStorageFlush ?? WebGlBrowserBridge.RequestStorageFlush;
 
             // Application.persistentDataPath is a Unity API — must be read on the main thread.
             // Captured once here; all file I/O below is pure System.IO.
@@ -119,6 +121,8 @@ namespace Sinkii09.UIFramework
                 File.Replace(tempPath, finalPath, BackupPathFor(key), ignoreMetadataErrors: true);
             else
                 File.Move(tempPath, finalPath);
+
+            RequestFlushIfInline();
         }
 
         public async UniTask<string> ReadAsync(string key, CancellationToken ct = default)
@@ -155,26 +159,37 @@ namespace Sinkii09.UIFramework
             return await RunIo(() =>
             {
                 ct.ThrowIfCancellationRequested();
-                var path = PathFor(key);
-                var existed = File.Exists(path);
-                if (existed)
-                    File.Delete(path);
-
-                var backupPath = BackupPathFor(key);
-                if (File.Exists(backupPath))
-                {
-                    try
-                    {
-                        File.Delete(backupPath);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogWarning($"[LocalFileStorageBackend] Failed to delete backup for '{key}': {ex.Message}");
-                    }
-                }
-
-                return existed;
+                return DeleteCore(key);
             }, ct);
+        }
+
+        private bool DeleteCore(string key)
+        {
+            var path = PathFor(key);
+            var existed = File.Exists(path);
+            if (existed)
+                File.Delete(path);
+
+            var backupPath = BackupPathFor(key);
+            var backupExisted = File.Exists(backupPath);
+            if (backupExisted)
+            {
+                try
+                {
+                    File.Delete(backupPath);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[LocalFileStorageBackend] Failed to delete backup for '{key}': {ex.Message}");
+                }
+            }
+
+            // A delete must reach IndexedDB too: otherwise "start fresh" can be undone by the browser
+            // restoring the old store on the next load.
+            if (existed || backupExisted)
+                RequestFlushIfInline();
+
+            return existed;
         }
 
         // Sweeps .tmp files left behind by a crash between WriteAllText and the replace/move step
@@ -183,6 +198,9 @@ namespace Sinkii09.UIFramework
         // at-or-after _constructedAtUtc (nothing can call WriteAsync before this backend exists), so
         // only strictly older files — provably from an already-ended session — are deleted. The 2s
         // margin absorbs filesystem timestamp rounding (e.g. FAT32).
+        //
+        // Requests no storage flush: an orphan .tmp left in IndexedDB is swept again next session, and
+        // the next real write's flush pushes this deletion along with it.
         //
         // Fire-and-forget on the thread-pool path only. Under inline dispatch it runs to completion
         // synchronously inside the constructor — i.e. during VContainer's container build — so the

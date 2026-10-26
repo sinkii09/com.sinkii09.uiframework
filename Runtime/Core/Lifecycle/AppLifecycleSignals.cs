@@ -21,6 +21,7 @@ namespace Sinkii09.UIFramework
         private readonly Subject<bool> _pause = new();
         private readonly Subject<bool> _focus = new();
         private readonly Subject<Unit> _quit = new();
+        private readonly Subject<Unit> _hidden = new();
         private bool _disposed;
 
         /// <summary>Raised with <c>true</c> when the app is backgrounded.</summary>
@@ -47,6 +48,31 @@ namespace Sinkii09.UIFramework
         /// </remarks>
         public Observable<bool> OnFocusAsObservable => _focus;
 
+        /// <summary>Raised when the web page is hidden or being unloaded. WebGL only.</summary>
+        /// <remarks>
+        /// Fires on <c>visibilitychange</c> to hidden and on <c>pagehide</c>, synchronously inside the
+        /// browser event: a hidden tab stops the player loop, so handlers must do their work before
+        /// returning and must not await. Can fire twice for one hide (hidden, then pagehide).
+        /// Deliberately not folded into <see cref="OnPauseAsObservable"/>: pause carries mobile
+        /// semantics, and every existing pause subscriber would suddenly receive web events. Never
+        /// raised on other platforms.
+        /// </remarks>
+        public Observable<Unit> OnHiddenAsObservable => _hidden;
+
+        // Registered here and not by whoever subscribes, so the hook exists exactly as long as this
+        // component does — the bridge's callbacks must never outlive the player state they call into.
+        private void Awake()
+        {
+            if (Application.platform == RuntimePlatform.WebGLPlayer)
+                WebGlBrowserBridge.Register(RaiseHidden);
+        }
+
+        // The seam the WebGL bridge calls, and the one tests call to stand in for the browser.
+        internal void RaiseHidden()
+        {
+            if (!_disposed) _hidden.OnNext(Unit.Default);
+        }
+
         private void OnApplicationPause(bool paused) => Publish(_pause, paused);
 
         private void OnApplicationFocus(bool focused) => Publish(_focus, focused);
@@ -67,9 +93,11 @@ namespace Sinkii09.UIFramework
         private void OnDestroy()
         {
             _disposed = true;
+            WebGlBrowserBridge.Unregister(RaiseHidden);
             _pause.Dispose();
             _focus.Dispose();
             _quit.Dispose();
+            _hidden.Dispose();
         }
     }
 }

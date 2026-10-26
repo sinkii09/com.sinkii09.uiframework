@@ -30,7 +30,7 @@ namespace Sinkii09.UIFramework
         private readonly ISynchronousSaveService _syncSaves;
         private readonly float _debounceSeconds;
         private readonly float _maxLatencySeconds;
-        private readonly IDisposable _pauseSubscription;
+        private readonly IDisposable _lifecycleSubscription;
         private bool _disposed;
 
         // [Inject] is MANDATORY, not decoration — the same trap documented on JsonSaveService and
@@ -41,10 +41,13 @@ namespace Sinkii09.UIFramework
         public AutoSaveScheduler(ISaveService saves, AppLifecycleSignals signals, UIFrameworkConfig config)
             : this(saves, config.AutoSaveDebounceSeconds, config.AutoSaveMaxLatencySeconds)
         {
-            // Pause only. Quit is not reliable on mobile and focus fires for the virtual keyboard;
-            // see AppLifecycleSignals for both.
-            _pauseSubscription = signals.OnPauseAsObservable
-                .Where(paused => paused)
+            // Pause, plus page-hidden on WebGL, where Unity does not reliably raise pause for a hidden
+            // tab. Quit is not reliable on mobile and focus fires for the virtual keyboard; see
+            // AppLifecycleSignals for both. Both triggers may fire for one event, and the second
+            // flush is a pass over keys that are no longer dirty.
+            _lifecycleSubscription = Observable.Merge(
+                    signals.OnPauseAsObservable.Where(paused => paused).AsUnitObservable(),
+                    signals.OnHiddenAsObservable)
                 .Subscribe(_ => FlushSynchronously());
         }
 
@@ -108,7 +111,7 @@ namespace Sinkii09.UIFramework
             if (_disposed) return;
             _disposed = true;
 
-            _pauseSubscription?.Dispose();
+            _lifecycleSubscription?.Dispose();
 
             // Last chance to write. VContainer disposes entry points when the scope tears down — a
             // scene change, or quit on desktop where OnApplicationPause never fires at all — and
