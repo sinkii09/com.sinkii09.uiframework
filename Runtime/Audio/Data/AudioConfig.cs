@@ -15,6 +15,9 @@ namespace Sinkii09.UIFramework
         [Tooltip("Banks loaded at boot and kept for the session. UI and theme sounds must live in one of these.")]
         public string[] ResidentBankKeys = System.Array.Empty<string>();
 
+        [Tooltip("Default button, toggle and popup sounds. Its events must live in a resident bank.")]
+        public UISoundTheme Theme;
+
         [Tooltip("Largest step the engine advances per frame, so a resume after a long pause never jumps fades or envelopes.")]
         [Min(0.001f)] public float MaxTickDeltaSeconds = 0.1f;
 

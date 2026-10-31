@@ -127,6 +127,7 @@ namespace Sinkii09.UIFramework.Tests
             // fixtures keep compiling.)
             builder.RegisterInstance(new UIBackdrop(new UIViewPolicyResolver(null), null));
             builder.RegisterInstance<ITooltipService>(new NullTooltipService());
+            builder.RegisterInstance<IAudioService>(new NullAudioService());
             builder.Register<IUINavigator, UINavigator>(Lifetime.Singleton).AsSelf();
 
             using var container = builder.Build();

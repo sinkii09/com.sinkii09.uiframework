@@ -21,6 +21,7 @@ namespace Sinkii09.UIFramework
         public void UnloadBank(string key) { }
         public UniTask ReadyAsync() => UniTask.CompletedTask;
         public AudioCounters Counters => default;
+        public UISoundTheme Theme => null;
 
         // Lazy: reading PlayerPrefs is not allowed during the container build on every platform.
         public AudioPreferences Preferences => _preferences ??= new AudioPreferences();

@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99be3d1dab8bb824381e6ca0be90270c, type: 3}
+  m_Name: AudioConfig
+  m_EditorClassIdentifier: Sinkii09.UIFramework::Sinkii09.UIFramework.AudioConfig
+  PoolSizeWeb: 24
+  PoolSizeDefault: 32
+  ResidentBankKeys:
+  - AudioUiStarter/UiBank
+  Theme: {fileID: 11400000, guid: a2c629d31f137974486923da51c8f78b, type: 2}
+  MaxTickDeltaSeconds: 0.1
+  ReadyTimeoutSeconds: 5

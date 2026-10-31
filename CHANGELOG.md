@@ -2,6 +2,45 @@
 
 ## [Unreleased]
 
+## [3.12.0] - 2026-10-31
+
+UI audio. Opt in by assigning `UIFrameworkConfig.Audio`; without it `NullAudioService` is registered and
+nothing changes.
+
+### Added
+- **`IAudioService`**: a pure C# engine behind an AudioSource pool. Per-event, per-group and global
+  voice limits, reserved voices, steal policies, cooldowns, start delays, an equal-power music
+  crossfade, ducking, and 0 B per `Play`. Ref-counted `SoundBank` loading through `IAssetLoader`.
+  Pause by reason (hidden, paused, unfocused). A WebGL audio-context gate that drops SFX until the
+  first gesture and queues music. Device-wide Music/Sfx toggles in `AudioPreferences`.
+- **`AppLifecycleSignals.OnVisibleAsObservable`**: fires when the page becomes visible again on WebGL.
+- **`UIButtonSound`** (Default | Custom | Silent): plays the theme's ButtonClick/Toggle cue, or a
+  custom one. It resolves the service through its parent view, so rows spawned at runtime work. A
+  toggle whose value is set from code stays silent.
+- **Navigator cues**: a push plays the view's show cue and a pop its hide cue. The default is the
+  theme's PopupShow/PopupHide on the Popup layer and silent elsewhere. Each view can override this
+  (`_showSound`/`_hideSound`: Default, None or Custom). Stack clears and views pushed by a state's
+  `OnEnterAsync` stay silent.
+- **`UISoundTheme`**, assigned to `AudioConfig.Theme` and exposed as `IAudioService.Theme`.
+- **`SoundRef`**: an inspector picker of event paths.
+- **Editor tools:**
+  - `SoundValidator.Validate(root)`, for a game's EditMode test;
+  - per-game `SoundIds.g.cs` codegen (`SoundIdsCodegenSettings`, `Tools > UIFramework > Audio`);
+  - a SoundEvent context menu **Rename Path…** that rewrites every `SoundRef`;
+  - **Sound Events From Selected Clips**.
+- The **Audio UI Starter** sample.
+
+### Changed
+- `UINavigator` takes an optional trailing `IAudioService`. `UIViewBase` gets it through a second
+  `[Inject]` method. **A hand-built VContainer container that injects views or the navigator must
+  register `IAudioService`**, for example `NullAudioService`. `UIFrameworkLifetimeScope` already does.
+- The Resource Counter quick-create adds a `UIButtonSound`.
+
+### Known limitations
+- A popup pushed inside a state's `OnEnterAsync` plays no show cue (state changes are silent).
+- A push declined at max navigation depth has already played its show cue.
+- The validator scans prefabs, not scenes.
+
 ## [3.11.0] - 2026-10-26
 
 Idle-game numbers, WebGL saves that survive closing the tab, and a portrait column on wide screens.

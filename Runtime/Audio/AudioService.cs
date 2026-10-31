@@ -48,6 +48,8 @@ namespace Sinkii09.UIFramework
 
         public AudioPreferences Preferences => _preferences ??= new AudioPreferences();
 
+        public UISoundTheme Theme => _config.Theme;
+
         public void Initialize()
         {
             if (_engine != null || _disposed) return;

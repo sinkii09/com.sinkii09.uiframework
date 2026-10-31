@@ -35,5 +35,8 @@ namespace Sinkii09.UIFramework
         AudioCounters Counters { get; }
 
         AudioPreferences Preferences { get; }
+
+        /// <summary>The UI cues buttons and popups use by default. Null when no theme is assigned.</summary>
+        UISoundTheme Theme { get; }
     }
 }

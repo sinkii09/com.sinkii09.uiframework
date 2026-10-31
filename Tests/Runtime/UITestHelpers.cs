@@ -236,6 +236,8 @@ namespace Sinkii09.UIFramework.Tests
         {
             var builder = new ContainerBuilder();
             builder.Register<IUIAnimator, DOTweenUIAnimator>(Lifetime.Singleton);
+            // UIViewBase.InjectAudio needs it, exactly as in UIFrameworkLifetimeScope.
+            builder.RegisterInstance<IAudioService>(new NullAudioService());
             return builder.Build();
         }
     }

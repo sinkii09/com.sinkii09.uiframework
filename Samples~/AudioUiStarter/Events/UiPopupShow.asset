@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0873ddb85187f8448d7b4499e54b4e1, type: 3}
+  m_Name: UiPopupShow
+  m_EditorClassIdentifier: Sinkii09.UIFramework::Sinkii09.UIFramework.SoundEvent
+  Path: ui/popup-show
+  Clips:
+  - {fileID: 8300000, guid: e1ac563a83188f8428585b602eaef634, type: 3}
+  Container: 0
+  AvoidRepeat: 1
+  VolumeDb: -6
+  VolumeJitterDb: 0
+  PitchSemitones: 4
+  PitchJitterSemitones: 0
+  StartDelaySeconds: 0
+  Loop: 0
+  Group: {fileID: 11400000, guid: 4b35000452b59614f893a0ccb53b993b, type: 2}
+  OverridePriority: 0
+  Priority: 128
+  OverrideMaxInstances: 0
+  MaxInstances: 1
+  OverrideCooldown: 0
+  CooldownSeconds: 0
+  MeasuredLoudness: 0

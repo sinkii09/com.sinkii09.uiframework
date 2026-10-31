@@ -10,7 +10,7 @@ namespace Sinkii09.UIFramework
     // Facade over NavigationStack + UIStateMachine.
     // Views are auto-wired from UIViewRegistry. Call Register<>() only for manual overrides.
     // All navigation ops are main-thread only — _isTransitioning bool is not async-safe across threads.
-    public class UINavigator : IUINavigator
+    public partial class UINavigator : IUINavigator
     {
         private readonly INavigationStack _stack;
         private readonly IUIStateMachine _stateMachine;
@@ -18,6 +18,7 @@ namespace Sinkii09.UIFramework
         private readonly UIRootLayerRefs _layers;
         private readonly UIBackdrop _backdrop;
         private readonly ITooltipService _tooltips;
+        private readonly IAudioService _audio;
 
         private readonly Dictionary<Type, Func<CancellationToken, UniTask<IUIView>>> _creators = new();
         private readonly Dictionary<Type, Func<object, CancellationToken, UniTask<IUIView>>> _argsCreators = new();
@@ -33,7 +34,7 @@ namespace Sinkii09.UIFramework
         public IUIView Current => _stack.Peek();
         public bool IsTransitioning => _isTransitioning;
 
-        // `backdrop` and `tooltips` are trailing-optional for SOURCE compatibility only — existing
+        // `backdrop`, `tooltips` and `audio` are trailing-optional for SOURCE compatibility only — existing
         // tests construct this positionally. They are NOT optional dependencies: VContainer ignores
         // C# default parameter values, so UIFrameworkLifetimeScope registers a UIBackdrop and an
         // ITooltipService (real or Null-Object) unconditionally.
@@ -41,7 +42,8 @@ namespace Sinkii09.UIFramework
         [Inject]
         public UINavigator(INavigationStack stack, IUIStateMachine stateMachine,
             IUIViewFactory factory, IReadOnlyList<UIViewRegistration> registrations,
-            UIRootLayerRefs layers, UIBackdrop backdrop = null, ITooltipService tooltips = null)
+            UIRootLayerRefs layers, UIBackdrop backdrop = null, ITooltipService tooltips = null,
+            IAudioService audio = null)
         {
             _stack = stack;
             _stateMachine = stateMachine;
@@ -49,6 +51,7 @@ namespace Sinkii09.UIFramework
             _layers = layers;
             _backdrop = backdrop;
             _tooltips = tooltips;
+            _audio = audio;
             foreach (var r in registrations)
                 _creators[r.ViewType] = ct => _factory.CreateAsync(r.ViewType, r.VmType, r.Key, ct);
         }
@@ -94,6 +97,7 @@ namespace Sinkii09.UIFramework
                 // Block layers below this view BEFORE the push animation — prevents click-through
                 // on lower layers during the entrance transition.
                 RefreshLayerBlocking(view);
+                PlayNavigationCue(view, show: true);
                 await _stack.PushAsync(view, ct);
 
                 // PushAsync can decline silently (max navigation depth) or throw. Either way the
@@ -139,6 +143,7 @@ namespace Sinkii09.UIFramework
                 var view = await creator(args, ct);
                 // Block layers below this view BEFORE the push animation.
                 RefreshLayerBlocking(view);
+                PlayNavigationCue(view, show: true);
                 await _stack.PushAsync(view, ct);
 
                 // See the no-args overload: a declined or failed push must not leave blocking and
@@ -178,6 +183,7 @@ namespace Sinkii09.UIFramework
             _isTransitioning = true;
             try
             {
+                PlayNavigationCue(top, show: false);
                 await _stack.PopAsync(ct);
                 return NavigationResult.Completed;
             }
@@ -202,6 +208,7 @@ namespace Sinkii09.UIFramework
                 // Null means the stack was empty and nothing was popped (NavigationStack logs it).
                 // Same trap as a declined push: without this check an empty-stack pop reports
                 // Completed and the caller believes a view was dismissed.
+                PlayNavigationCue(_stack.Peek(), show: false);
                 IUIView popped = await _stack.PopAsync(ct);
                 return popped != null ? NavigationResult.Completed : NavigationResult.Rejected;
             }

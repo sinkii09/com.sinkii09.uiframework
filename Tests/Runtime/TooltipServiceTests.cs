@@ -70,6 +70,7 @@ namespace Sinkii09.UIFramework.Tests
                 // their own.
                 var builder = new ContainerBuilder();
                 builder.RegisterInstance(animator).As<IUIAnimator>();
+                builder.RegisterInstance<IAudioService>(new NullAudioService());
                 resolver = builder.Build();
             }
 

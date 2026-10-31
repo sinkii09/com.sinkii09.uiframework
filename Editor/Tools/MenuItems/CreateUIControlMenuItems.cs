@@ -79,6 +79,8 @@ namespace Sinkii09.UIFramework.Editor
             SetPrivateField(control, "_icon", icon.GetComponent<Image>());
             SetPrivateField(control, "_label", label.GetComponent<TextMeshProUGUI>());
             SetPrivateField(control, "_button", root.GetComponent<Button>());
+            // The sound validator requires every Button to declare its sound, Silent included.
+            root.AddComponent<UIButtonSound>();
 
             Finish(root);
         }
