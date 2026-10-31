@@ -15,6 +15,7 @@ var UIFrameworkBrowserLifecycle = {
   $UIFrameworkLifecycle: {
     onHidden: 0,
     onSyncError: 0,
+    onVisible: 0,
     listening: false,
     inFlight: 0,
     generation: 0,
@@ -66,6 +67,14 @@ var UIFrameworkBrowserLifecycle = {
       state.flush(false);
     },
 
+    // The page is visible again. Called before recover(), which returns early when no sync is
+    // queued; audio must hear about every return, not only the ones with pending storage work.
+    visible: function () {
+      var onVisible = UIFrameworkLifecycle.onVisible;
+      if (!onVisible) return;
+      try { {{{ makeDynCall('v', 'onVisible') }}}(); } catch (e) { console.error('[UIFramework] visible callback failed', e); }
+    },
+
     hidden: function () {
       var state = UIFrameworkLifecycle;
       // Zero after Unregister (component destroyed, or unityInstance.Quit()): never call into a
@@ -94,21 +103,27 @@ var UIFrameworkBrowserLifecycle = {
 
     state.visibilityListener = function () {
       if (document.visibilityState === 'hidden') state.hidden();
-      else state.recover();
+      else { state.visible(); state.recover(); }
     };
     state.pageHideListener = function () { state.hidden(); };
     // Safari does not reliably raise visibilitychange on a bfcache restore; pageshow does.
-    state.pageShowListener = function (e) { if (e && e.persisted) state.recover(); };
+    state.pageShowListener = function (e) { if (e && e.persisted) { state.visible(); state.recover(); } };
     document.addEventListener('visibilitychange', state.visibilityListener);
     window.addEventListener('pagehide', state.pageHideListener);
     window.addEventListener('pageshow', state.pageShowListener);
     state.listening = true;
   },
 
+  // Stores the callback only; the listeners that call it are owned by RegisterLifecycleCallbacks.
+  UIFramework_RegisterVisibleCallback: function (onVisible) {
+    UIFrameworkLifecycle.onVisible = onVisible;
+  },
+
   UIFramework_UnregisterLifecycleCallbacks: function () {
     var state = UIFrameworkLifecycle;
     state.onHidden = 0;
     state.onSyncError = 0;
+    state.onVisible = 0;
     if (!state.listening) return;
 
     document.removeEventListener('visibilitychange', state.visibilityListener);

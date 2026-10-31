@@ -214,6 +214,7 @@ namespace Sinkii09.UIFramework
             builder.RegisterEntryPoint<GameLifecycleManager>(Lifetime.Singleton).AsSelf();
 
             RegisterPersistence(builder, config);
+            RegisterAudio(builder, config);
         }
 
         // Override in your game's LifetimeScope to substitute a custom BootState subclass.

@@ -22,9 +22,11 @@ namespace Sinkii09.UIFramework
         [DllImport("__Internal")] private static extern void UIFramework_RequestStorageFlush();
         [DllImport("__Internal")] private static extern void UIFramework_RegisterLifecycleCallbacks(Action onHidden, Action onSyncError);
         [DllImport("__Internal")] private static extern void UIFramework_UnregisterLifecycleCallbacks();
+        [DllImport("__Internal")] private static extern void UIFramework_RegisterVisibleCallback(Action onVisible);
 #endif
 
         private static Action _onHidden;
+        private static Action _onVisible;
 
         // Fire-and-forget by design, never awaited. JsonSaveService holds the per-key gate across
         // the backend write; awaiting the sync there would hold it across frames, and a tab-hide in
@@ -38,11 +40,15 @@ namespace Sinkii09.UIFramework
 #endif
         }
 
-        internal static void Register(Action onHidden)
+        // onVisible is a separate extern rather than a third argument to the existing one, so the
+        // persistence externs keep their exact signatures.
+        internal static void Register(Action onHidden, Action onVisible = null)
         {
             _onHidden = onHidden;
+            _onVisible = onVisible;
 #if UNITY_WEBGL && !UNITY_EDITOR
             UIFramework_RegisterLifecycleCallbacks(HandleHidden, HandleSyncError);
+            UIFramework_RegisterVisibleCallback(HandleVisible);
 #endif
         }
 
@@ -52,6 +58,7 @@ namespace Sinkii09.UIFramework
         {
             if (_onHidden != onHidden) return;
             _onHidden = null;
+            _onVisible = null;
 #if UNITY_WEBGL && !UNITY_EDITOR
             UIFramework_UnregisterLifecycleCallbacks();
 #endif
@@ -71,6 +78,20 @@ namespace Sinkii09.UIFramework
             catch (Exception ex)
             {
                 Debug.LogError($"[Persistence] Page-hidden handler threw: {ex}");
+            }
+        }
+
+        // Same rules as HandleHidden: called from inside a browser event, so nothing may escape.
+        [Preserve, MonoPInvokeCallback(typeof(Action))]
+        internal static void HandleVisible()
+        {
+            try
+            {
+                _onVisible?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[Lifecycle] Page-visible handler threw: {ex}");
             }
         }
 

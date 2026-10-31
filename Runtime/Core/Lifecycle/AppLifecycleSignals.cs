@@ -22,6 +22,7 @@ namespace Sinkii09.UIFramework
         private readonly Subject<bool> _focus = new();
         private readonly Subject<Unit> _quit = new();
         private readonly Subject<Unit> _hidden = new();
+        private readonly Subject<Unit> _visible = new();
         private bool _disposed;
 
         /// <summary>Raised with <c>true</c> when the app is backgrounded.</summary>
@@ -59,18 +60,33 @@ namespace Sinkii09.UIFramework
         /// </remarks>
         public Observable<Unit> OnHiddenAsObservable => _hidden;
 
+        /// <summary>Raised when the web page becomes visible again. WebGL only.</summary>
+        /// <remarks>
+        /// The counterpart of <see cref="OnHiddenAsObservable"/>: <c>visibilitychange</c> to visible,
+        /// and <c>pageshow</c> on a back/forward-cache restore (Safari does not reliably raise the
+        /// former there). Can fire twice for one return. Audio uses it to unpause and to resume an
+        /// audio context iOS left interrupted. Never raised on other platforms.
+        /// </remarks>
+        public Observable<Unit> OnVisibleAsObservable => _visible;
+
         // Registered here and not by whoever subscribes, so the hook exists exactly as long as this
         // component does — the bridge's callbacks must never outlive the player state they call into.
         private void Awake()
         {
             if (Application.platform == RuntimePlatform.WebGLPlayer)
-                WebGlBrowserBridge.Register(RaiseHidden);
+                WebGlBrowserBridge.Register(RaiseHidden, RaiseVisible);
         }
 
         // The seam the WebGL bridge calls, and the one tests call to stand in for the browser.
         internal void RaiseHidden()
         {
             if (!_disposed) _hidden.OnNext(Unit.Default);
+        }
+
+        // Same seam, for the page becoming visible.
+        internal void RaiseVisible()
+        {
+            if (!_disposed) _visible.OnNext(Unit.Default);
         }
 
         private void OnApplicationPause(bool paused) => Publish(_pause, paused);
@@ -98,6 +114,7 @@ namespace Sinkii09.UIFramework
             _focus.Dispose();
             _quit.Dispose();
             _hidden.Dispose();
+            _visible.Dispose();
         }
     }
 }

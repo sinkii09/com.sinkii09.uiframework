@@ -114,5 +114,11 @@ namespace Sinkii09.UIFramework
         [Tooltip("Pointer travel that cancels an in-progress long-press, so a scroll gesture " +
                  "starting on a cell does not fire a tooltip.")]
         public float TooltipLongPressMoveCancelPixels = 10f;
+
+        // --- Audio ------------------------------------------------------------------------
+
+        [Tooltip("Optional. Assign to enable the built-in AudioService; leave empty and IAudioService " +
+                 "resolves to NullAudioService, which plays nothing.")]
+        public AudioConfig Audio;
     }
 }

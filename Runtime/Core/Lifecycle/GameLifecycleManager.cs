@@ -23,6 +23,8 @@ namespace Sinkii09.UIFramework
         // BEFORE IAsyncStartable.StartAsync, so without this an enqueue from there would find the
         // manager idle, drain immediately, and enter a state that BootState then clobbers.
         private bool _hasStarted;
+        // Null when the manager is constructed directly (tests); the container always supplies one.
+        private IAudioService _audio;
 
         [Inject]
         public GameLifecycleManager(
@@ -46,6 +48,11 @@ namespace Sinkii09.UIFramework
             stateMachine.RegisterState(bootState);
             stateMachine.RegisterState(loadingState);
         }
+
+        // Method injection, not a constructor parameter: the constructor is public and constructed
+        // directly by tests and games, so a new parameter would break every one of them.
+        [Inject]
+        public void InjectAudio(IAudioService audio) => _audio = audio;
 
         // Shows the overlay, awaits it, and swallows any failure — the overlay is decorative and
         // must never block or fail a state transition. Hide is the caller's responsibility.
@@ -98,6 +105,12 @@ namespace Sinkii09.UIFramework
                         "enter the first state with EnqueueStateChange<T>() instead.");
                 else if (result != NavigationResult.Completed)
                     Debug.LogError($"[GameLifecycleManager] Boot transition was {result} — the game has no initial state.");
+
+                // Resident banks have been loading since the container started, in parallel with boot.
+                // Held here, while still transitioning, so the first queued state (the first screen a
+                // player can tap) waits for its UI sounds. Bounded by the audio ready timeout.
+                if (_audio != null)
+                    await _audio.ReadyAsync().AttachExternalCancellation(cts.Token);
             }
             finally
             {
